@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   description: "Emissão simples e segura de NFS-e.",
   applicationName: "Moreira & Castro",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/favicon-64.png", sizes: "64x64", type: "image/png" }],
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }]
+  },
   appleWebApp: { capable: true, title: "Moreira & Castro", statusBarStyle: "default" }
 };
 
