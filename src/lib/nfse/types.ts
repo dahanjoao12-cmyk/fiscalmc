@@ -6,6 +6,13 @@ export type FiscalDocumentDomain = {
   issuer: { taxId: string; municipalRegistration: string; municipalityCode: string };
   customer: { taxId: string; name: string };
   service: { nationalTaxCode: string; municipalServiceCode?: string; description: string };
+  taxConfiguration: {
+    regime: "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL";
+    taxationType: "MUNICIPAL" | "OUTSIDE_MUNICIPALITY" | "EXEMPT";
+    iss: { rateBasisPoints?: number; withheld: boolean; source: "OFFICE_PARAMETER" | "MUNICIPAL_INTEGRATION" };
+    retentions?: Partial<Record<"irrf" | "pis" | "cofins" | "csll" | "inss", number>>;
+    ibsCbs: { customerFieldsEnabled: boolean; ibsRateBasisPoints?: number; cbsRateBasisPoints?: number };
+  };
   amountCents: number;
   serviceDate: string;
   dps: { series: string; number: bigint; identifier: string };
