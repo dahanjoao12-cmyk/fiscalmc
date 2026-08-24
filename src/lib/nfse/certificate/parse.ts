@@ -1,0 +1,4 @@
+import "server-only";
+import forge from "node-forge";
+export type CertificateMetadata={subject:string;issuer:string;serial:string;validFrom:string;validUntil:string};
+export function parseA1(buffer:Buffer,password:string):CertificateMetadata{const asn1=forge.asn1.fromDer(buffer.toString("binary"));const p12=forge.pkcs12.pkcs12FromAsn1(asn1,false,password);const bags=p12.getBags({bagType:forge.pki.oids.certBag})[forge.pki.oids.certBag]??[];const cert=bags[0]?.cert;if(!cert)throw new Error("Certificado A1 não encontrado no arquivo.");const now=new Date();if(cert.validity.notAfter<=now)throw new Error("Certificado A1 expirado.");return{subject:cert.subject.attributes.map((item)=>`${item.shortName}=${item.value}`).join(", "),issuer:cert.issuer.attributes.map((item)=>`${item.shortName}=${item.value}`).join(", "),serial:cert.serialNumber,validFrom:cert.validity.notBefore.toISOString(),validUntil:cert.validity.notAfter.toISOString()};}

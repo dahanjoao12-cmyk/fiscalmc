@@ -1,0 +1,3 @@
+import { describe,expect,it } from "vitest";
+import { isValidCnpj,isValidCpf,normalizeTaxId } from "@/lib/validation/identification";
+describe("identificação fiscal",()=>{it("normaliza sem remover letras",()=>expect(normalizeTaxId("12.abc.345/01de-35")).toBe("12ABC34501DE35"));it("valida CPF conhecido",()=>expect(isValidCpf("529.982.247-25")).toBe(true));it("rejeita CPF repetido",()=>expect(isValidCpf("111.111.111-11")).toBe(false));it("aceita o exemplo oficial de CNPJ alfanumérico",()=>expect(isValidCnpj("12.ABC.345/01DE-35")).toBe(true));it("rejeita DV incorreto",()=>expect(isValidCnpj("12ABC34501DE36")).toBe(false));});

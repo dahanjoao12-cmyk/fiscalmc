@@ -1,0 +1,6 @@
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
+import { MockBanner } from "@/components/mock-banner";
+const companies=["Almeida Consultoria","Papelaria Horizonte","Clínica Boa Vida","Studio Norte"];
+export default function CompaniesPage(){return <AppShell active="companies" admin><div className="page"><MockBanner/><div className="page-heading"><div><h1>Empresas</h1><p>Configuração e situação de emissão.</p></div><Link href="/admin/empresas/nova" className="button primary"><Plus size={18}/>Nova empresa</Link></div><section className="section"><div className="row header" style={{gridTemplateColumns:"2fr 1fr 1fr 1fr auto"}}><span>Empresa</span><span>CNPJ</span><span>Certificado</span><span>Última emissão</span><span/></div>{companies.map((name,index)=><Link href={`/admin/empresas/${index+1}`} className="row" style={{gridTemplateColumns:"2fr 1fr 1fr 1fr auto"}} key={name}><strong>{name}</strong><span>{index===0?"12ABC34501DE35":"00.000.000/0001-00"}</span><span className={`status ${index===1?"warning":""}`}>{index===1?"Vence em 12 dias":"Válido"}</span><span>{index===2?"Nunca":"24/08/2026"}</span><span>→</span></Link>)}</section></div></AppShell>}

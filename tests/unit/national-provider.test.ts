@@ -1,0 +1,2 @@
+import { describe,expect,it } from "vitest"; import { NationalNFSeProvider } from "@/lib/nfse/issuance/national-provider"; import { buildFiscalDocument } from "@/lib/nfse/issuance/domain";
+describe("NationalNFSeProvider",()=>{it("permanece fail-closed antes da homologação",async()=>{const input={document:buildFiscalDocument({organizationId:"org",amountCents:100,serviceDate:"2026-08-24",description:"Teste",dpsNumber:1n}),idempotencyKey:"test"};await expect(new NationalNFSeProvider().issue(input)).rejects.toMatchObject({code:"NFSE_NATIONAL_NOT_HOMOLOGATED"})});});

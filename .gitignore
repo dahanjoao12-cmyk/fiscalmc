@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+!.env.example

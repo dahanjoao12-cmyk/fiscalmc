@@ -1,0 +1,6 @@
+import { Plus, Search } from "lucide-react";
+import { AppShell } from "@/components/app-shell";
+import { MockBanner } from "@/components/mock-banner";
+import { customers } from "@/lib/mock-data";
+export const metadata = { title: "Tomadores" };
+export default function CustomersPage() { return <AppShell active="customers"><div className="page"><MockBanner/><div className="page-heading"><div><h1>Tomadores</h1><p>Salve os clientes que aparecem com frequência.</p></div><button className="button primary"><Plus size={18}/><span>Novo tomador</span></button></div><div className="field" style={{ maxWidth:480, marginBottom:24 }}><label htmlFor="search">Pesquisar</label><div style={{ position:"relative" }}><Search size={18} style={{ position:"absolute", left:15, top:17, color:"var(--muted)" }}/><input className="input" id="search" style={{ paddingLeft:44 }} placeholder="Nome, CPF ou CNPJ"/></div></div><section className="section"><h2 className="section-title">Tomadores cadastrados</h2>{customers.map((customer,index) => <div className="row" style={{ gridTemplateColumns:"1fr 1fr auto" }} key={customer}><strong>{customer}</strong><span>{index % 2 ? "Pessoa física" : "Pessoa jurídica"}</span><button className="button ghost">Editar</button></div>)}</section></div></AppShell>; }

@@ -1,0 +1,2 @@
+import { describe,expect,it } from "vitest"; import { assertOrganizationMembership,can } from "@/lib/security/authorization";
+describe("autorização",()=>{it("cliente pode emitir, mas não configurar fiscal",()=>{expect(can("CLIENT_USER","invoice:issue")).toBe(true);expect(can("CLIENT_USER","service:write")).toBe(false)});it("bloqueia tenant não vinculado",()=>expect(()=>assertOrganizationMembership(["org-a"],"org-b")).toThrow("FORBIDDEN_ORGANIZATION"));});

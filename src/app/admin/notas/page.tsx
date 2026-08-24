@@ -1,0 +1,2 @@
+import { AppShell } from "@/components/app-shell"; import { MockBanner } from "@/components/mock-banner"; import { InvoiceList } from "@/components/invoice-list";
+export default function AdminInvoices(){return <AppShell active="invoices" admin><div className="page"><MockBanner/><div className="page-heading"><div><h1>Notas fiscais</h1><p>Emissões de todas as empresas autorizadas.</p></div></div><InvoiceList all/></div></AppShell>}
