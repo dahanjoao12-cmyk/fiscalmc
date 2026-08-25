@@ -22,6 +22,10 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
+## Smoke de parâmetros municipais
+
+No Windows, execute `pnpm nfse:test-municipal-parameters -- 3304557 07.02.01.001 2026-08-25`. O comando usa o mesmo `MunicipalParametersProvider` da aplicação, valida o JSON e não transmite DPS. Para comparar TLS nativo e fetch/Undici, execute `pnpm nfse:test-municipal-tls`.
+
 ## Segurança operacional
 
 - `NFSE_PROVIDER=mock` e `NFSE_ENV=production_restricted` são os padrões.

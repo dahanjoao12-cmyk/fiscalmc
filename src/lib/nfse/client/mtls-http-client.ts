@@ -1,0 +1,4 @@
+import https from "node:https";
+import { LocalCertificateProvider } from "../certificate/local-provider";
+export type MtlsResponse={url:string;status:number;body:unknown};
+export class MtlsHttpClient { async getJson(url:string):Promise<MtlsResponse>{const material=await new LocalCertificateProvider().loadMtlsMaterial();return new Promise<MtlsResponse>((resolve,reject)=>{const request=https.get(url,{cert:material.cert,key:material.key,rejectUnauthorized:true,headers:{accept:"application/json"}},response=>{let text="";response.setEncoding("utf8");response.on("data",chunk=>text+=chunk);response.on("end",()=>{try{resolve({url,status:response.statusCode??0,body:JSON.parse(text)});}catch{reject(Object.assign(new Error("JSON inválido."),{code:"INVALID_API_RESPONSE"}));}});});request.on("error",error=>reject(Object.assign(error,{code:"MTLS_HANDSHAKE_FAILED"})));});} }

@@ -44,3 +44,16 @@ Não há alegação de integração nacional concluída. `NationalNFSeProvider` 
 3. pacote XSD oficial vigente no dia do teste, com checksum;
 4. confirmação do contrato do Swagger com mTLS;
 5. testes de DPS, assinatura, parâmetros, consulta/reconciliação e DANFSe no ambiente restrito.
+
+## Smoke de parâmetros municipais no Windows
+
+Com Node.js instalado, execute:
+
+```bash
+pnpm nfse:test-municipal-parameters -- 3304557 07.02.01.001 2026-08-25
+pnpm nfse:test-municipal-tls
+```
+
+Para mTLS, configure somente no `.env.local` (fora do repositório): `NFSE_CERT_PATH` com o caminho absoluto do arquivo `.pfx`/`.p12` e `NFSE_CERT_PASSWORD` com a senha. Em seguida execute `pnpm nfse:test-certificate` e `pnpm nfse:test-mtls`. O cliente usa validação TLS normal (`rejectUnauthorized: true`) e nunca escreve material do certificado em disco ou logs.
+
+O primeiro comando usa o mesmo `MunicipalParametersProvider` da aplicação, imprime a URL, versão do Node e status HTTP, e valida a resposta JSON antes de exibir somente município, serviço, competência, incidência, alíquota e vigência. O segundo compara `node:https` com `fetch`/Undici. Nenhum dos dois transmite DPS, imprime secrets, relaxa TLS ou habilita Produção.

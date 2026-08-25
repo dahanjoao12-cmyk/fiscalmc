@@ -1,0 +1,4 @@
+import https from "node:https";
+const url="https://adn.producaorestrita.nfse.gov.br/parametrizacao/3304557/07.02.01.001/2026-08-25/aliquota";
+const report=(label:string,error:unknown)=>{const value=error as Error&{code?:string;cause?:{code?:string;message?:string}};console.log(JSON.stringify({client:label,name:value.name,code:value.code,causeCode:value.cause?.code,causeMessage:value.cause?.message,hostname:"adn.producaorestrita.nfse.gov.br",port:443,node:process.version}));};
+await new Promise<void>(resolve=>https.get(url,response=>{console.log(`Node https: HTTP ${response.statusCode}`);response.resume();response.on("end",resolve)}).on("error",error=>{report("node:https",error);resolve()}));try{const response=await fetch(url);console.log(`fetch/Undici: HTTP ${response.status}`);}catch(error){report("fetch/Undici",error);}

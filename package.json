@@ -11,7 +11,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "nfse:test-certificate": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-certificate.ts",
+    "nfse:test-municipal-parameters": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-municipal-parameters.ts",
+    "nfse:test-municipal-tls": "tsx scripts/test-municipal-tls.ts",
+    "nfse:test-mtls": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-mtls.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
@@ -39,6 +43,7 @@
     "eslint": "9.39.1",
     "eslint-config-next": "16.3.2",
     "tailwindcss": "4.3.3",
+    "tsx": "4.21.0",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }

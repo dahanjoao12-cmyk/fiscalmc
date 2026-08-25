@@ -4,7 +4,7 @@ export type InvoiceStatus = "DRAFT" | "READY" | "SUBMITTING" | "ISSUED" | "REJEC
 export type FiscalDocumentDomain = {
   organizationId: string;
   issuer: { taxId: string; municipalRegistration: string; municipalityCode: string };
-  customer: { taxId: string; name: string };
+  customer: { taxId?: string; name: string };
   service: { nationalTaxCode: string; municipalServiceCode?: string; description: string };
   taxConfiguration: {
     regime: "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL";

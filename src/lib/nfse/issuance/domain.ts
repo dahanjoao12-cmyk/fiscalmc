@@ -1,19 +1,14 @@
 import type { FiscalDocumentDomain } from "../types";
 
-export function buildFiscalDocument(input: { organizationId:string; amountCents:number; serviceDate:string; description:string; dpsNumber:bigint }): FiscalDocumentDomain {
+export function buildFiscalDocument(input: { organization:{id:string;taxId:string;municipalRegistration:string;municipalityCode:string}; customer:{taxId?:string|null;legalName:string}; service:{nationalTaxCode:string;municipalServiceCode?:string|null}; taxConfiguration:FiscalDocumentDomain["taxConfiguration"]; amountCents:number; serviceDate:string; description:string; dpsNumber:bigint; dpsSeries:string }): FiscalDocumentDomain {
   return {
-    organizationId: input.organizationId,
-    issuer: { taxId:"12ABC34501DE35", municipalRegistration:"123456", municipalityCode:"3550308" },
-    customer: { taxId:"45DEF67801GH90", name:"Empresa ABC" },
-    service: { nationalTaxCode:"010101", municipalServiceCode:"0101", description:input.description },
-    taxConfiguration: {
-      regime:"SIMPLES_NACIONAL",
-      taxationType:"MUNICIPAL",
-      iss:{ withheld:false, source:"OFFICE_PARAMETER" },
-      ibsCbs:{ customerFieldsEnabled:false }
-    },
+    organizationId: input.organization.id,
+    issuer: { taxId:input.organization.taxId, municipalRegistration:input.organization.municipalRegistration, municipalityCode:input.organization.municipalityCode },
+    customer: { taxId:input.customer.taxId ?? undefined, name:input.customer.legalName },
+    service: { nationalTaxCode:input.service.nationalTaxCode, municipalServiceCode:input.service.municipalServiceCode ?? undefined, description:input.description },
+    taxConfiguration: input.taxConfiguration,
     amountCents:input.amountCents,
     serviceDate:input.serviceDate,
-    dps:{ series:"00001", number:input.dpsNumber, identifier:`35503082${"12ABC34501DE35".padStart(14,"0")}00001${input.dpsNumber.toString().padStart(15,"0")}` }
+    dps:{ series:input.dpsSeries, number:input.dpsNumber, identifier:`${input.organization.municipalityCode}2${input.organization.taxId.padStart(14,"0")}${input.dpsSeries}${input.dpsNumber.toString().padStart(15,"0")}` }
   };
 }

@@ -11,12 +11,12 @@ export default function LoginPage() {
       <h1 style={{ margin:"40px 0 8px", fontSize:30, color:"var(--navy)", letterSpacing:"-.03em" }}>Acesse sua conta</h1>
       <p style={{ color:"var(--muted)", margin:"0 0 28px" }}>Emita e acompanhe suas notas fiscais de serviço.</p>
       <form action={login}>
-        <div className="field"><label htmlFor="email">E-mail</label><input className="input" id="email" name="email" type="email" autoComplete="email" placeholder="voce@empresa.com.br" required /></div>
+        <div className="field"><label htmlFor="cnpj">CNPJ</label><input className="input" id="cnpj" name="cnpj" inputMode="text" autoComplete="username" placeholder="00.000.000/0000-00" required /></div>
         <div className="field"><label htmlFor="password">Senha</label><input className="input" id="password" name="password" type="password" autoComplete="current-password" required /></div>
         <Link href="/recuperar-senha" style={{ display:"block", margin:"16px 0 22px", color:"var(--emerald-dark)", fontSize:14, fontWeight:700 }}>Esqueci minha senha</Link>
         <button className="button primary" style={{ width:"100%" }} type="submit">Entrar</button>
       </form>
-      <p style={{ color:"var(--muted)", fontSize:12, margin:"20px 0 0", lineHeight:1.5 }}>Demonstração local: qualquer e-mail e senha abrem o ambiente mock. Com Supabase configurado, a autenticação é validada no servidor.</p>
+      <p style={{ color:"var(--muted)", fontSize:12, margin:"20px 0 0", lineHeight:1.5 }}>No ambiente local mock, o painel permanece disponível para demonstração. Com Supabase configurado, o acesso é validado pelo CNPJ no servidor.</p>
     </section>
   </main>;
 }
