@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
 
+test("visitante sem sessão é direcionado ao login", async ({ page }) => {
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { name: "Acesse sua conta" })).toBeVisible();
+});
+
 test("modo mock explícito permite pré-visualizar sem dados fiscais técnicos", async ({ page }) => {
   await page.goto("/app/emitir");
 

@@ -1,4 +1,5 @@
 import "server-only";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -12,6 +13,11 @@ export async function requireSessionOrganization():Promise<SessionOrganization>{
   if(error||!data?.length) throw new Error("FORBIDDEN_ORGANIZATION");
   if(data.length>1) throw new Error("ORGANIZATION_CONTEXT_REQUIRED");
   return {organizationId:data[0].organization_id,role:data[0].role,userId:user.id};
+}
+
+/** Server Components redirect unauthenticated visitors; API routes retain HTTP error responses. */
+export async function requireClientPageSession():Promise<SessionOrganization>{
+  try{return await requireSessionOrganization();}catch{redirect("/login");}
 }
 
 export type OfficeSession={userId:string;role:"SUPER_ADMIN"|"OFFICE_STAFF";displayName:string};

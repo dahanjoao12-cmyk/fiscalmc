@@ -1,2 +1,2 @@
-import { AppShell } from "@/components/app-shell";import { CustomerManager } from "@/components/customer-manager";
-export default async function CustomersPage(){return <AppShell active="customers"><div className="page"><div className="page-heading"><div><h1>Tomadores</h1><p>Cadastre e localize os clientes da sua empresa.</p></div></div><CustomerManager/></div></AppShell>}
+import { AppShell } from "@/components/app-shell";import { CustomerManager } from "@/components/customer-manager";import { requireClientPageSession } from "@/lib/auth/session";
+export default async function CustomersPage(){await requireClientPageSession();return <AppShell active="customers"><div className="page"><div className="page-heading"><div><h1>Tomadores</h1><p>Cadastre e localize os clientes da sua empresa.</p></div></div><CustomerManager/></div></AppShell>}
