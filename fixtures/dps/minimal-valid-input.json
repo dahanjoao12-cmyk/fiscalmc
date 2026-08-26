@@ -1,0 +1,8 @@
+{
+  "issuer": {"taxId":"12345678000195","name":"Prestador Sanitizado Ltda","municipalRegistration":"12345"},
+  "customer": {"taxId":"52998224725","name":"Tomador Sanitizado"},
+  "serviceLocation": {"municipalityCode":"3304557"},
+  "fiscal": {"regime":{"simpleNational":"1","special":"0"},"iss":{"taxation":"1","withholding":"1","rateBasisPoints":500},"totalTaxes":{"indicator":"0"}},
+  "emittedAt":"2026-08-25T09:00:00-03:00",
+  "applicationVersion":"FISCALMC_0.1"
+}

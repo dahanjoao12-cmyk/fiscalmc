@@ -26,6 +26,10 @@ pnpm test:e2e
 
 No Windows, execute `pnpm nfse:test-municipal-parameters -- 3304557 07.02.01.001 2026-08-25`. O comando usa o mesmo `MunicipalParametersProvider` da aplicação, valida o JSON e não transmite DPS. Para comparar TLS nativo e fetch/Undici, execute `pnpm nfse:test-municipal-tls`.
 
+## Preparação de DPS
+
+Com `NFSE_CERT_PATH` e `NFSE_CERT_PASSWORD` preenchidos apenas no `.env.local`, execute `pnpm nfse:test-dps`. O smoke monta uma DPS sanitizada, valida os XSDs oficiais fixados, assina e verifica com o A1, faz o teste GZip/Base64 e prepara o body da SEFIN. Ele não executa `POST /nfse`.
+
 ## Segurança operacional
 
 - `NFSE_PROVIDER=mock` e `NFSE_ENV=production_restricted` são os padrões.

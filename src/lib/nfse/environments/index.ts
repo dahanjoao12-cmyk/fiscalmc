@@ -10,7 +10,7 @@ export function getNFSeEnvironment(): NFSeEnvironment {
 }
 
 export const endpoints = {
-  PRODUCTION_RESTRICTED: "https://sefin.producaorestrita.nfse.gov.br/API/SefinNacional",
+  PRODUCTION_RESTRICTED: "https://sefin.producaorestrita.nfse.gov.br/SefinNacional",
   PRODUCTION: "https://sefin.nfse.gov.br/SefinNacional"
 } as const;
 

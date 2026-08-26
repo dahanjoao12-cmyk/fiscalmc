@@ -1,0 +1,20 @@
+import input from "../fixtures/dps/minimal-valid-input.json";
+import { buildFiscalDocument } from "../src/lib/nfse/issuance/domain";
+import { mapToDpsModel } from "../src/lib/nfse/dps/model";
+import { buildDpsXml } from "../src/lib/nfse/dps/xml";
+import { validateDpsXml } from "../src/lib/nfse/dps/xsd";
+import { signDpsXml,verifyDpsSignature } from "../src/lib/nfse/dps/signature";
+import { buildSefinDpsRequest } from "../src/lib/nfse/dps/sefin-request";
+import { decodeDpsFromSefin } from "../src/lib/nfse/dps/encoding";
+import { assertDpsReadiness } from "../src/lib/nfse/dps/readiness";
+
+const document=buildFiscalDocument({organization:{id:"fixture",taxId:input.issuer.taxId,municipalRegistration:input.issuer.municipalRegistration,municipalityCode:"3304557"},customer:{taxId:input.customer.taxId,legalName:input.customer.name},service:{nationalTaxCode:"070201"},taxConfiguration:{regime:"SIMPLES_NACIONAL",taxationType:"MUNICIPAL",iss:{withheld:false,source:"OFFICE_PARAMETER"},ibsCbs:{customerFieldsEnabled:false}},amountCents:10000,serviceDate:"2026-08-25",description:"Serviço sanitizado de teste",dpsNumber:1n,dpsSeries:"00001"});
+const fiscal={...input.fiscal,regime:{simpleNational:"1" as const,special:"0" as const},iss:{taxation:"1" as const,withholding:"1" as const,rateBasisPoints:500},totalTaxes:{indicator:"0" as const}};
+await assertDpsReadiness({organization:{legalName:input.issuer.name,taxId:input.issuer.taxId,municipalRegistration:input.issuer.municipalRegistration,municipalityCode:"3304557",address:{street:"Rua Sanitizada",number:"1",neighborhood:"Centro",postalCode:"20000000",municipalityCode:"3304557",stateOrProvince:"RJ"}},service:{nationalTaxCode:"070201",municipalTaxCode:"001",locationMunicipalityCode:"3304557"},customer:{name:input.customer.name,taxId:input.customer.taxId},fiscal});
+const model=mapToDpsModel(document,{...input,fiscal,dpsMunicipalTaxCode:"001"});
+const unsignedXml=buildDpsXml(model);
+const unsigned=await validateDpsXml(unsignedXml);if(!unsigned.valid)throw new Error(`UNSIGNED_XSD_FAILED: ${unsigned.errors.join(" | ")}`);
+const signedXml=await signDpsXml(unsignedXml);verifyDpsSignature(signedXml);
+const signed=await validateDpsXml(signedXml);if(!signed.valid)throw new Error(`SIGNED_XSD_FAILED: ${signed.errors.join(" | ")}`);
+const request=buildSefinDpsRequest(signedXml);if(decodeDpsFromSefin(request.dpsXmlGZipB64)!==signedXml)throw new Error("GZIP_BASE64_ROUNDTRIP_FAILED");
+console.log("Fiscal config: OK\nOrganization readiness: OK\nService readiness: OK\nCustomer readiness: OK\nCertificate readiness: OK\nDpsModel: OK\nIdentifier: OK\nUnsigned XML: OK\nUnsigned XSD: PASS\nSignature: PASS\nSignature verification: PASS\nSigned XSD: PASS\nGZip/Base64: PASS\nSEFIN request: READY\nTRANSMISSION: BLOCKED");

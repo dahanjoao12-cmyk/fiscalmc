@@ -15,13 +15,16 @@
     "nfse:test-certificate": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-certificate.ts",
     "nfse:test-municipal-parameters": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-municipal-parameters.ts",
     "nfse:test-municipal-tls": "tsx scripts/test-municipal-tls.ts",
-    "nfse:test-mtls": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-mtls.ts"
+    "nfse:test-mtls": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-mtls.ts",
+    "nfse:inspect-sefin-openapi": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/inspect-sefin-openapi.ts",
+    "nfse:test-dps": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-dps.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.112.3",
     "clsx": "2.1.1",
     "fast-xml-parser": "5.11.0",
+    "libxmljs2": "^0.37.0",
     "lucide-react": "1.33.0",
     "next": "16.3.2",
     "node-forge": "1.4.0",

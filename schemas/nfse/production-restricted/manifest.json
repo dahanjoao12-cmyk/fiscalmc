@@ -1,0 +1,18 @@
+{
+  "environment": "PRODUCTION_RESTRICTED",
+  "downloadedAt": "2026-08-25",
+  "source": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/producao-restrita",
+  "artifacts": [
+    {
+      "name": "NFSe-ESQUEMAS_XSD-PRODREST-v1.01-20260727",
+      "file": "NFSe-ESQUEMAS_XSD-PRODREST-v1.01-20260727.zip",
+      "sha256": "6C7E0510D3ECFF4454F291F4E10B742D27A4818F23AAB181494F96D0EA79F3DC",
+      "xsdFiles": ["DPS_v1.01.xsd", "tiposComplexos_v1.01.xsd", "tiposSimples_v1.01.xsd", "xmldsig-core-schema.xsd"]
+    },
+    {
+      "name": "ANEXO_I-SEFIN_ADN-DPS_NFSe-SNNFSe-PRODREST-v1.01-20260209",
+      "file": "ANEXO_I-SEFIN_ADN-DPS_NFSe-SNNFSe-PRODREST-v1.01-20260209.xlsx",
+      "sha256": "2AE2AC9F91EFA9B64F0C9ED97ACAF18BB7513B090FAE39BA5BDA59187E64D9E"
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import type { FiscalDocumentDomain } from "../types";
+import { buildDpsIdentifier } from "../dps/identifier";
 
 export function buildFiscalDocument(input: { organization:{id:string;taxId:string;municipalRegistration:string;municipalityCode:string}; customer:{taxId?:string|null;legalName:string}; service:{nationalTaxCode:string;municipalServiceCode?:string|null}; taxConfiguration:FiscalDocumentDomain["taxConfiguration"]; amountCents:number; serviceDate:string; description:string; dpsNumber:bigint; dpsSeries:string }): FiscalDocumentDomain {
   return {
@@ -9,6 +10,6 @@ export function buildFiscalDocument(input: { organization:{id:string;taxId:strin
     taxConfiguration: input.taxConfiguration,
     amountCents:input.amountCents,
     serviceDate:input.serviceDate,
-    dps:{ series:input.dpsSeries, number:input.dpsNumber, identifier:`${input.organization.municipalityCode}2${input.organization.taxId.padStart(14,"0")}${input.dpsSeries}${input.dpsNumber.toString().padStart(15,"0")}` }
+    dps:{ series:input.dpsSeries, number:input.dpsNumber, identifier:buildDpsIdentifier({municipalityCode:input.organization.municipalityCode,taxId:input.organization.taxId,series:input.dpsSeries,number:input.dpsNumber}) }
   };
 }
