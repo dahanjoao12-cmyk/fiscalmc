@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { Building2, FilePlus2, FileText, Home, LogOut, Settings, UserRound, UsersRound } from "lucide-react";
 import { Brand } from "./brand";
 import { getShellIdentity } from "@/lib/auth/session";
@@ -19,8 +20,7 @@ const adminNav = [
   ["settings", "/admin/configuracoes", "Configurações", Settings]
 ] as const;
 
-export async function AppShell({ children, active, admin = false }: ShellProps) {
-  const identity=await getShellIdentity();
+export function AppShell({ children, active, admin = false }: ShellProps) {
   const nav = admin ? adminNav : clientNav;
   const switchHref = admin ? "/app" : "/admin";
   const switchLabel = admin ? "Área do cliente" : "Área do escritório";
@@ -32,7 +32,7 @@ export async function AppShell({ children, active, admin = false }: ShellProps) 
         {nav.map(([key, href, label, Icon]) => <Link key={key} href={href} className={`nav-link ${active === key ? "active" : ""}`}><Icon size={20} aria-hidden />{label}</Link>)}
       </nav>
       <div className="sidebar-bottom">
-        {(admin||identity?.canAccessOffice)&&<Link className="nav-link role-switch" href={switchHref}><SwitchIcon size={19} aria-hidden />{switchLabel}</Link>}
+        {admin?<Link className="nav-link role-switch" href={switchHref}><SwitchIcon size={19} aria-hidden />{switchLabel}</Link>:<Suspense fallback={null}><OfficeSwitch className="nav-link role-switch" href={switchHref} label={switchLabel} iconSize={19}/></Suspense>}
         <form action={logout}><button className="nav-link" type="submit"><LogOut size={19} aria-hidden />Sair</button></form>
       </div>
     </aside>
@@ -40,8 +40,8 @@ export async function AppShell({ children, active, admin = false }: ShellProps) 
       <header className="topbar">
         <Link className="mobile-brand" href={admin ? "/admin" : "/app"} aria-label={admin ? "Início da área do escritório" : "Início da área do cliente"}><Brand /></Link>
         <div className="topbar-actions">
-        {(admin||identity?.canAccessOffice)&&<Link className="mobile-role-switch" href={switchHref} aria-label={switchLabel}><SwitchIcon size={18} aria-hidden /><span>{admin ? "Cliente" : "Escritório"}</span></Link>}
-        <div className="identity"><span className="organization">{admin ? "Escritório" : "Área do cliente"}</span><span className="avatar" aria-hidden>{(identity?.displayName??"U").slice(0,1).toUpperCase()}</span><span>{identity?.displayName??"Usuário"}</span></div>
+        {admin?<Link className="mobile-role-switch" href={switchHref} aria-label={switchLabel}><SwitchIcon size={18} aria-hidden /><span>Cliente</span></Link>:<Suspense fallback={null}><OfficeSwitch className="mobile-role-switch" href={switchHref} label={switchLabel} iconSize={18} compact/></Suspense>}
+        <Suspense fallback={<IdentityFallback admin={admin}/>}><ShellIdentity admin={admin}/></Suspense>
       </div></header>
       {children}
     </main>
@@ -49,6 +49,22 @@ export async function AppShell({ children, active, admin = false }: ShellProps) 
       {nav.map(([key, href, label, Icon]) => <Link key={key} href={href} className={active === key ? "active" : ""}><Icon size={22} aria-hidden /><span>{mobileLabel(key, label)}</span></Link>)}
     </nav>
   </div>;
+}
+
+async function OfficeSwitch({className,href,label,iconSize,compact=false}:{className:string;href:string;label:string;iconSize:number;compact?:boolean}){
+  const identity=await getShellIdentity();
+  if(!identity?.canAccessOffice)return null;
+  return <Link className={className} href={href} aria-label={label}><Building2 size={iconSize} aria-hidden /><span>{compact?"Escritório":label}</span></Link>;
+}
+
+async function ShellIdentity({admin}:{admin:boolean}){
+  const identity=await getShellIdentity();
+  const displayName=identity?.displayName??"Usuário";
+  return <div className="identity"><span className="organization">{admin ? "Escritório" : "Área do cliente"}</span><span className="avatar" aria-hidden>{displayName.slice(0,1).toUpperCase()}</span><span>{displayName}</span></div>;
+}
+
+function IdentityFallback({admin}:{admin:boolean}){
+  return <div className="identity identity-loading" aria-label="Carregando perfil"><span className="organization">{admin ? "Escritório" : "Área do cliente"}</span><span className="avatar" aria-hidden>…</span><span className="identity-name-skeleton"/></div>;
 }
 
 function mobileLabel(key: string, label: string) {
