@@ -14,3 +14,4 @@ export async function login(formData:FormData){
   redirect("/app");
 }
 export async function requestPasswordReset(formData:FormData){const client=await createClient();if(client){const email=String(formData.get("email")??"");const appUrl=process.env.NEXT_PUBLIC_APP_URL??"http://localhost:3000";await client.auth.resetPasswordForEmail(email,{redirectTo:`${appUrl}/auth/callback?next=/nova-senha`});}redirect("/login?reset=sent");}
+export async function logout(){const client=await createClient();await client?.auth.signOut();redirect("/login");}

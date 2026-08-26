@@ -17,7 +17,8 @@
     "nfse:test-municipal-tls": "tsx scripts/test-municipal-tls.ts",
     "nfse:test-mtls": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-mtls.ts",
     "nfse:inspect-sefin-openapi": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/inspect-sefin-openapi.ts",
-    "nfse:test-dps": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-dps.ts"
+    "nfse:test-dps": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/test-dps.ts",
+    "nfse:import-national-services": "node --env-file=.env.local ./node_modules/tsx/dist/cli.mjs scripts/import-national-service-catalog.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",

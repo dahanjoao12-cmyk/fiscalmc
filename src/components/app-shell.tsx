@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Building2, FilePlus2, FileText, Home, LogOut, Settings, UserRound, UsersRound } from "lucide-react";
 import { Brand } from "./brand";
+import { getShellIdentity } from "@/lib/auth/session";
+import { logout } from "@/app/login/actions";
 
 type ShellProps = { children: React.ReactNode; active: "home" | "issue" | "invoices" | "customers" | "companies" | "settings"; admin?: boolean };
 
@@ -17,7 +19,8 @@ const adminNav = [
   ["settings", "/admin/configuracoes", "Configurações", Settings]
 ] as const;
 
-export function AppShell({ children, active, admin = false }: ShellProps) {
+export async function AppShell({ children, active, admin = false }: ShellProps) {
+  const identity=await getShellIdentity();
   const nav = admin ? adminNav : clientNav;
   const switchHref = admin ? "/app" : "/admin";
   const switchLabel = admin ? "Área do cliente" : "Área do escritório";
@@ -29,16 +32,16 @@ export function AppShell({ children, active, admin = false }: ShellProps) {
         {nav.map(([key, href, label, Icon]) => <Link key={key} href={href} className={`nav-link ${active === key ? "active" : ""}`}><Icon size={20} aria-hidden />{label}</Link>)}
       </nav>
       <div className="sidebar-bottom">
-        <Link className="nav-link role-switch" href={switchHref}><SwitchIcon size={19} aria-hidden />{switchLabel}</Link>
-        <Link className="nav-link" href="/login"><LogOut size={19} aria-hidden />Sair</Link>
+        {(admin||identity?.canAccessOffice)&&<Link className="nav-link role-switch" href={switchHref}><SwitchIcon size={19} aria-hidden />{switchLabel}</Link>}
+        <form action={logout}><button className="nav-link" type="submit"><LogOut size={19} aria-hidden />Sair</button></form>
       </div>
     </aside>
     <main className="main">
       <header className="topbar">
         <Link className="mobile-brand" href={admin ? "/admin" : "/app"} aria-label={admin ? "Início da área do escritório" : "Início da área do cliente"}><Brand /></Link>
         <div className="topbar-actions">
-        <Link className="mobile-role-switch" href={switchHref} aria-label={switchLabel}><SwitchIcon size={18} aria-hidden /><span>{admin ? "Cliente" : "Escritório"}</span></Link>
-        <div className="identity"><span className="organization">{admin ? "Escritório Moreira & Castro" : "Almeida Consultoria"}</span><span className="avatar" aria-hidden>{admin ? "MM" : "J"}</span><span>{admin ? "Marina" : "João"}</span></div>
+        {(admin||identity?.canAccessOffice)&&<Link className="mobile-role-switch" href={switchHref} aria-label={switchLabel}><SwitchIcon size={18} aria-hidden /><span>{admin ? "Cliente" : "Escritório"}</span></Link>}
+        <div className="identity"><span className="organization">{admin ? "Escritório" : "Área do cliente"}</span><span className="avatar" aria-hidden>{(identity?.displayName??"U").slice(0,1).toUpperCase()}</span><span>{identity?.displayName??"Usuário"}</span></div>
       </div></header>
       {children}
     </main>
