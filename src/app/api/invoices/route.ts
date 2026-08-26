@@ -9,6 +9,7 @@ import { requireSessionOrganization } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveFiscalConfiguration } from "@/lib/nfse/fiscal-rule-resolver";
 import { SafeFiscalError } from "@/lib/nfse/errors";
+import { getServiceReadiness } from "@/lib/nfse/service-readiness";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,10 +34,10 @@ export async function POST(request:Request) {
     const [{data:organization},{data:customer},{data:service},{data:profile}]=await Promise.all([
       admin.from("organizations").select("id,tax_id,municipal_registration,municipality_code,status,emission_blocked").eq("id",session.organizationId).single(),
       admin.from("customers").select("id,tax_id,legal_name").eq("id",body.customerId).eq("organization_id",session.organizationId).single(),
-      admin.from("service_templates").select("id,national_tax_code,municipal_service_code,national_service_code_id").eq("id",body.serviceTemplateId).eq("organization_id",session.organizationId).eq("active",true).single(),
+      admin.from("service_templates").select("id,national_tax_code,municipal_service_code,municipal_service_mapping_id,national_service_code_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,reviewed_at,active").eq("id",body.serviceTemplateId).eq("organization_id",session.organizationId).eq("active",true).single(),
       admin.from("tax_profiles").select("tax_regime,reviewed_at,iss_configuration,dps_configuration").eq("organization_id",session.organizationId).single()
     ]);
-    if(!organization||!customer||!service||!profile||organization.emission_blocked||organization.status!=="ACTIVE"||!profile.reviewed_at||!service.national_service_code_id) return NextResponse.json({error:"Uma configuração fiscal desta empresa precisa ser revisada pelo escritório antes da emissão.",code:"FISCAL_CONFIGURATION_INCOMPLETE"},{status:422});
+    if(!organization||!customer||!service||!profile||organization.emission_blocked||organization.status!=="ACTIVE"||!profile.reviewed_at||!getServiceReadiness(service).ready) return NextResponse.json({error:"Uma configuração fiscal desta empresa precisa ser revisada pelo escritório antes da emissão.",code:"FISCAL_CONFIGURATION_INCOMPLETE"},{status:422});
     const replay=await admin.from("invoices").select("id,status,access_key,nfse_number").eq("organization_id",session.organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();
     if(replay.data) return NextResponse.json({invoiceId:replay.data.id,status:replay.data.status,accessKey:replay.data.access_key,nfseNumber:replay.data.nfse_number},{headers:{"X-Idempotent-Replay":"true","X-Request-ID":requestId}});
     const fiscal=await resolveFiscalConfiguration({municipalityCode:organization.municipality_code,nationalTaxCode:service.national_tax_code,municipalServiceCode:service.municipal_service_code,taxRegime:profile.tax_regime,reviewedAt:profile.reviewed_at,serviceDate:body.serviceDate,dpsConfiguration:profile.dps_configuration});
