@@ -6,10 +6,10 @@ import { clientLoginErrorMessage, signInClientWithCnpj } from "@/lib/auth/client
 
 export async function login(formData:FormData){
   const client=await createClient();
-  if(!client&&process.env.NFSE_PROVIDER!=="national") redirect("/app");
-  if(!client) redirect("/login?error=invalid_credentials");
+  if(!client) redirect("/login?error=configuration");
   try { assertRateLimit(`client-login:${String(formData.get("cnpj")??"")}`,5,60_000); } catch { redirect("/login?error=rate_limited"); }
-  const result=await signInClientWithCnpj(String(formData.get("cnpj")??""),String(formData.get("password")??""),async(email,password)=>!(await client.auth.signInWithPassword({email,password})).error);
+  let result;
+  try { result=await signInClientWithCnpj(String(formData.get("cnpj")??""),String(formData.get("password")??""),async(email,password)=>!(await client.auth.signInWithPassword({email,password})).error); } catch { redirect("/login?error=configuration"); }
   if(!result.ok) redirect(`/login?error=${encodeURIComponent(clientLoginErrorMessage)}`);
   redirect("/app");
 }
