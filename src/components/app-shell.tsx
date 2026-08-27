@@ -2,10 +2,11 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Building2, FilePlus2, FileText, Home, LogOut, Settings, UserRound, UsersRound } from "lucide-react";
 import { Brand } from "./brand";
+import { ShellNavLink } from "./shell-nav-link";
 import { getShellIdentity } from "@/lib/auth/session";
 import { logout } from "@/app/login/actions";
 
-type ShellProps = { children: React.ReactNode; active: "home" | "issue" | "invoices" | "customers" | "companies" | "settings"; admin?: boolean };
+type ShellProps = { children: React.ReactNode; admin?: boolean };
 
 const clientNav = [
   ["home", "/app", "Início", Home],
@@ -20,7 +21,7 @@ const adminNav = [
   ["settings", "/admin/configuracoes", "Configurações", Settings]
 ] as const;
 
-export function AppShell({ children, active, admin = false }: ShellProps) {
+export function AppShell({ children, admin = false }: ShellProps) {
   const nav = admin ? adminNav : clientNav;
   const switchHref = admin ? "/app" : "/admin";
   const switchLabel = admin ? "Área do cliente" : "Área do escritório";
@@ -29,7 +30,7 @@ export function AppShell({ children, active, admin = false }: ShellProps) {
     <aside className={`sidebar${admin ? " admin" : ""}`}>
       <Brand />
       <nav className="nav" aria-label="Navegação principal">
-        {nav.map(([key, href, label, Icon]) => <Link key={key} href={href} className={`nav-link ${active === key ? "active" : ""}`}><Icon size={20} aria-hidden />{label}</Link>)}
+        {nav.map(([key, href, label, Icon]) => <ShellNavLink key={key} itemKey={key} href={href} className="nav-link"><Icon size={20} aria-hidden />{label}</ShellNavLink>)}
       </nav>
       <div className="sidebar-bottom">
         {admin?<Link className="nav-link role-switch" href={switchHref}><SwitchIcon size={19} aria-hidden />{switchLabel}</Link>:<Suspense fallback={null}><OfficeSwitch className="nav-link role-switch" href={switchHref} label={switchLabel} iconSize={19}/></Suspense>}
@@ -46,7 +47,7 @@ export function AppShell({ children, active, admin = false }: ShellProps) {
       {children}
     </main>
     <nav className={`mobile-nav${admin ? " admin" : ""}`} aria-label={admin ? "Navegação do escritório" : "Navegação do cliente"}>
-      {nav.map(([key, href, label, Icon]) => <Link key={key} href={href} className={active === key ? "active" : ""}><Icon size={22} aria-hidden /><span>{mobileLabel(key, label)}</span></Link>)}
+      {nav.map(([key, href, label, Icon]) => <ShellNavLink key={key} itemKey={key} href={href}><Icon size={22} aria-hidden /><span>{mobileLabel(key, label)}</span></ShellNavLink>)}
     </nav>
   </div>;
 }
