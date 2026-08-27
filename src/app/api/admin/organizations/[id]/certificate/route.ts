@@ -11,7 +11,7 @@ export const runtime="nodejs";
 const maxCertificateBytes=5*1024*1024;
 const passwordSchema=z.string().min(1).max(512);
 
-class CertificateRequestError extends Error{constructor(readonly code:"INVALID_CERTIFICATE_PASSWORD"|"INVALID_CERTIFICATE_FILE"|"CERTIFICATE_ORGANIZATION_MISMATCH"|"CERTIFICATE_EXPIRED"|"CERTIFICATE_STORAGE_FAILED",message:string){super(message);}}
+class CertificateRequestError extends Error{constructor(readonly code:"INVALID_CERTIFICATE_PASSWORD"|"INVALID_CERTIFICATE_FILE"|"CERTIFICATE_ORGANIZATION_MISMATCH"|"CERTIFICATE_EXPIRED"|"CERTIFICATE_STORAGE_FAILED"|"CERTIFICATE_VAULT_UNAVAILABLE",message:string){super(message);}}
 function humanError(error:unknown){
   if(error instanceof CertificateRequestError)return{status:422,error:error.message,code:error.code};
   return{status:422,error:"Não foi possível cadastrar o certificado.",code:"CERTIFICATE_STORAGE_FAILED"};
@@ -59,6 +59,9 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     if(validation.status!=="VALID"||!validation.metadata)throw new CertificateRequestError("INVALID_CERTIFICATE_FILE","Não foi possível ler este certificado A1.");
     if(!validation.metadata.ownerTaxId||normalizeTaxId(validation.metadata.ownerTaxId)!==normalizeTaxId(organization.tax_id))throw new CertificateRequestError("CERTIFICATE_ORGANIZATION_MISMATCH","O certificado pertence a outro CNPJ.");
     const status=classifyCertificate(validation.metadata);
+    let encryptedPassword;
+    try{encryptedPassword=encryptSecret(Buffer.from(password,"utf8"));}
+    catch{throw new CertificateRequestError("CERTIFICATE_VAULT_UNAVAILABLE","O armazenamento seguro de certificados está indisponível. Tente novamente após a configuração do ambiente.");}
     const db=createAdminClient();
     const{data:current,error:currentError}=await db.from("digital_certificates").select("id").eq("organization_id",organizationId).is("replaced_at",null).maybeSingle();
     if(currentError)throw currentError;
@@ -67,7 +70,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const{error:uploadError}=await db.storage.from("a1-certificates").upload(storagePath,buffer,{contentType:"application/x-pkcs12",upsert:false});
     if(uploadError)throw new CertificateRequestError("CERTIFICATE_STORAGE_FAILED","Não foi possível armazenar o certificado.");
     const{data:certificateId,error:registrationError}=await db.rpc("register_organization_certificate",{
-      p_organization_id:organizationId,p_storage_path:storagePath,p_encrypted_password:encryptSecret(Buffer.from(password,"utf8")),
+      p_organization_id:organizationId,p_storage_path:storagePath,p_encrypted_password:encryptedPassword,
       p_serial:validation.metadata.serial,p_subject:validation.metadata.subject,p_issuer:validation.metadata.issuer,
       p_valid_from:validation.metadata.validFrom,p_valid_until:validation.metadata.validUntil,p_status:status,
       p_owner_tax_id:validation.metadata.ownerTaxId,p_fingerprint_sha256:validation.metadata.fingerprintSha256,
