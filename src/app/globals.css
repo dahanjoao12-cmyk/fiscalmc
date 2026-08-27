@@ -169,6 +169,7 @@ textarea.input { min-height:108px; padding-top:14px; resize:vertical; }
 .alert { padding:14px 16px; border-radius:9px; margin:18px 0; font-size:14px; }
 .alert.error { color:#761f1f; background:var(--red-soft); border:1px solid #e8b5b5; }
 .alert.success { color:#075c4b; background:var(--emerald-soft); border:1px solid #a5d9cb; }
+.certificate-manager { max-width:780px; border:1px solid var(--border); border-radius:14px; overflow:hidden; background:#fff; }.certificate-header { display:flex; justify-content:space-between; gap:20px; padding:28px; border-bottom:1px solid var(--border); }.certificate-header h2 { margin:0; color:var(--navy); font-size:24px; }.certificate-header p:not(.eyebrow) { margin:8px 0 0; color:var(--muted); font-size:14px; }.certificate-icon { width:42px; height:42px; color:var(--amber); }.certificate-icon.valid { color:var(--emerald); }.certificate-icon.invalid { color:var(--red); }.certificate-details { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0; margin:0; }.certificate-details div { padding:18px 28px; border-bottom:1px solid var(--border); }.certificate-details dt { color:var(--muted); font-size:12px; }.certificate-details dd { margin:6px 0 0; color:var(--ink); font-size:14px; font-weight:700; overflow-wrap:anywhere; }.certificate-upload { display:grid; grid-template-columns:1fr 1fr auto; align-items:end; gap:14px; padding:24px 28px; background:var(--surface); }.certificate-upload label { display:grid; gap:7px; color:var(--muted); font-size:13px; }.certificate-upload input { min-height:46px; border:1px solid var(--border); border-radius:8px; padding:10px; background:#fff; }.certificate-upload .alert { grid-column:1 / -1; margin:0; }
 
 @media (max-width: 800px) {
   body { padding-bottom:72px; }
@@ -222,6 +223,7 @@ textarea.input { min-height:108px; padding-top:14px; resize:vertical; }
   .form-card { max-width:none; }
   .company-onboarding { grid-template-columns:1fr; gap:18px; }.company-onboarding-aside { position:static; grid-template-columns:1fr; }.company-form-section { padding:20px 16px; margin:0 -4px; }.company-form-grid { grid-template-columns:1fr; }.company-field.span-2 { grid-column:auto; }.company-form-actions { flex-direction:column-reverse; align-items:stretch; }.company-form-actions .button { width:100%; }.company-page-heading { margin-bottom:20px; }
   .fiscal-form-heading,.fiscal-review { align-items:stretch; flex-direction:column; padding:20px 16px; }.fiscal-section { padding:20px 16px; }.fiscal-grid { grid-template-columns:1fr; }.fiscal-actions { display:grid; }.fiscal-actions .button { width:100%; }
+  .certificate-header { padding:20px 16px; }.certificate-details { grid-template-columns:1fr; }.certificate-details div { padding:16px; }.certificate-upload { grid-template-columns:1fr; padding:20px 16px; }.certificate-upload .button { width:100%; }
   .field { margin-top:16px; }
   .input { min-height:56px; font-size:16px; }
   .issue-fields { grid-template-columns:1fr; }

@@ -1,4 +1,5 @@
 import { LocalCertificateProvider } from "../certificate/local-provider";
+import type { CertificateProvider } from "../certificate/provider";
 import { SafeFiscalError } from "../errors";
 import type { DpsFiscalConfiguration, DpsPerson } from "./model";
 
@@ -38,6 +39,8 @@ export async function assertDpsReadiness(input: {
   customer: DpsCustomerReadiness;
   fiscal: DpsFiscalConfiguration;
   verifyCertificate?: boolean;
+  certificateProvider?:CertificateProvider;
+  organizationId?:string;
 }) {
   const { organization, service, customer, fiscal } = input;
   if (!organization.legalName || !/^\d{14}$/.test(organization.taxId.replace(/\D/g, "")) || !organization.municipalRegistration || !/^\d{7}$/.test(organization.municipalityCode)) incomplete("organização");
@@ -54,8 +57,8 @@ export async function assertDpsReadiness(input: {
   if (fiscal.iss.taxation === "1" && fiscal.iss.rateBasisPoints === undefined) incomplete("fiscal");
 
   if (input.verifyCertificate !== false) {
-    const certificate = await new LocalCertificateProvider().validate();
-    if (certificate.status !== "VALID") throw new SafeFiscalError("CERTIFICATE_LOAD_FAILED", "O certificado A1 não está apto para assinar a DPS.");
+    try{await (input.certificateProvider??new LocalCertificateProvider()).getCertificateMaterial({organizationId:input.organizationId});}
+    catch{throw new SafeFiscalError("CERTIFICATE_LOAD_FAILED", "O certificado A1 não está apto para assinar a DPS.");}
   }
 
   return { issuerAddress, certificateVerified: input.verifyCertificate !== false };

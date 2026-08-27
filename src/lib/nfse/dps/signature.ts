@@ -1,5 +1,6 @@
 import { SignedXml } from "xml-crypto";
 import { LocalCertificateProvider } from "../certificate/local-provider";
+import type { CertificateProvider } from "../certificate/provider";
 import { SafeFiscalError } from "../errors";
 
 const xmlDsigNamespace="http://www.w3.org/2000/09/xmldsig#";
@@ -8,9 +9,9 @@ const xmlDsigNamespace="http://www.w3.org/2000/09/xmldsig#";
 // local verification; transmission remains blocked until official acceptance.
 const profile={signatureAlgorithm:"http://www.w3.org/2001/04/xmldsig-more#rsa-sha256",canonicalizationAlgorithm:"http://www.w3.org/2001/10/xml-exc-c14n#",digestAlgorithm:"http://www.w3.org/2001/04/xmlenc#sha256",transforms:["http://www.w3.org/2000/09/xmldsig#enveloped-signature","http://www.w3.org/2001/10/xml-exc-c14n#"]} as const;
 
-export async function signDpsXml(unsignedXml:string){
+export async function signDpsXml(unsignedXml:string,input:{certificateProvider?:CertificateProvider;organizationId?:string}={}){
   try{
-    const material=await new LocalCertificateProvider().loadMtlsMaterial();
+    const material=await (input.certificateProvider??new LocalCertificateProvider()).getCertificateMaterial({organizationId:input.organizationId});
     const signature=new SignedXml({privateKey:material.key,publicCert:material.cert,getKeyInfoContent:SignedXml.getKeyInfoContent});
     signature.signatureAlgorithm=profile.signatureAlgorithm;
     signature.canonicalizationAlgorithm=profile.canonicalizationAlgorithm;
