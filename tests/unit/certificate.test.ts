@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe,expect,it } from "vitest";
 import { loadA1Material,validateA1 } from "@/lib/nfse/certificate/parse";
 import { CERTIFICATE_EXPIRING_SOON_DAYS,classifyCertificate,getCertificateReadiness } from "@/lib/nfse/certificate/status";
+import { certificateHolderName } from "@/lib/nfse/certificate/presentation";
 import { signDpsXml,verifyDpsSignature } from "@/lib/nfse/dps/signature";
 
 function testP12(input:{taxId:string;password:string;validFrom:Date;validUntil:Date}){
@@ -53,6 +54,9 @@ describe("A1 certificate validation",()=>{
     const valid=getCertificateReadiness({certificate:{status:"VALID",owner_tax_id:validInput.taxId,valid_until:"2027-01-01T00:00:00.000Z"},organizationTaxId:validInput.taxId,now});
     const expiring=getCertificateReadiness({certificate:{status:"EXPIRING",owner_tax_id:validInput.taxId,valid_until:"2026-09-10T00:00:00.000Z"},organizationTaxId:validInput.taxId,now});
     expect(valid.ready).toBe(true);expect(expiring.ready).toBe(true);expect(expiring.warning).toBe(true);
+  });
+  it("apresenta o CN sem expor o subject X.509 inteiro",()=>{
+    expect(certificateHolderName(`C=BR, CN=Empresa Exemplo:${validInput.taxId}, O=ICP-Brasil`)).toBe("Empresa Exemplo");
   });
   it("assina pela abstração de provider, sem depender do caminho local",async()=>{
     const material=loadA1Material(testP12(validInput),validInput.password,now);

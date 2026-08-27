@@ -17,6 +17,7 @@ function humanError(error:unknown){
   return{status:422,error:"Não foi possível cadastrar o certificado.",code:"CERTIFICATE_STORAGE_FAILED"};
 }
 async function requireCertificateWrite(){const session=await requireOfficeSession();if(!can(session.role,"certificate:write"))throw new Error("FORBIDDEN_CERTIFICATE_WRITE");return session;}
+async function requireCertificateRead(){const session=await requireOfficeSession();if(!can(session.role,"certificate:read"))throw new Error("FORBIDDEN_CERTIFICATE_READ");return session;}
 async function getOrganization(id:string){
   if(!z.string().uuid().safeParse(id).success)return null;
   const{data,error}=await createAdminClient().from("organizations").select("id,tax_id").eq("id",id).maybeSingle();
@@ -26,7 +27,7 @@ async function getOrganization(id:string){
 
 export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){
   try{
-    await requireCertificateWrite();
+    await requireCertificateRead();
     const{id}=await params;
     if(!await getOrganization(id))return NextResponse.json({error:"Empresa não encontrada."},{status:404});
     const{data,error}=await createAdminClient().from("digital_certificates").select("id,subject,issuer,serial,owner_tax_id,valid_from,valid_until,status,created_at").eq("organization_id",id).is("replaced_at",null).maybeSingle();
