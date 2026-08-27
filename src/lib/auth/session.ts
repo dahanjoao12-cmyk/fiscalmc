@@ -2,7 +2,6 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 
 export type SessionOrganization={organizationId:string;role:"SUPER_ADMIN"|"OFFICE_STAFF"|"CLIENT_USER";userId:string};
 const getAuthenticatedClient=cache(async()=>{
@@ -39,8 +38,10 @@ export async function requireOfficeSession():Promise<OfficeSession>{
   const {data:memberships,error}=await getActiveMemberships(user.id);
   const officeMemberships=memberships?.filter(item=>item.role==="SUPER_ADMIN"||item.role==="OFFICE_STAFF");
   if(error||!officeMemberships?.length)throw new Error("FORBIDDEN_OFFICE");
-  const {data:profile}=await createAdminClient().from("profiles").select("full_name").eq("user_id",user.id).maybeSingle();
-  return{userId:user.id,role:officeMemberships.some(item=>item.role==="SUPER_ADMIN")?"SUPER_ADMIN":"OFFICE_STAFF",displayName:profile?.full_name||user.email||"Equipe do escritório"};
+  const displayName=typeof user.user_metadata.full_name==="string"&&user.user_metadata.full_name.trim()
+    ?user.user_metadata.full_name.trim()
+    :user.email||"Equipe do escritório";
+  return{userId:user.id,role:officeMemberships.some(item=>item.role==="SUPER_ADMIN")?"SUPER_ADMIN":"OFFICE_STAFF",displayName};
 }
 
 export async function getShellIdentity(){
