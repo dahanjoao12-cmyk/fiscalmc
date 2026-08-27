@@ -16,10 +16,11 @@ export default async function LoginPage({searchParams}:{searchParams:Promise<{er
       <form action={login}>
         <div className="field"><label htmlFor="cnpj">CNPJ</label><input className="input" id="cnpj" name="cnpj" inputMode="text" autoComplete="username" placeholder="00.000.000/0000-00" required /></div>
         <div className="field"><label htmlFor="password">Senha</label><input className="input" id="password" name="password" type="password" autoComplete="current-password" required /></div>
-        <Link href="/recuperar-senha" style={{ display:"block", margin:"16px 0 22px", color:"var(--emerald-dark)", fontSize:14, fontWeight:700 }}>Esqueci minha senha</Link>
+        <p style={{ margin:"16px 0 22px", color:"var(--muted)", fontSize:13 }}>Esqueceu a senha? Solicite a redefinição ao escritório.</p>
         <button className="button primary" style={{ width:"100%" }} type="submit">Entrar</button>
       </form>
-      <p style={{ color:"var(--muted)", fontSize:12, margin:"20px 0 0", lineHeight:1.5 }}>No ambiente local mock, o painel permanece disponível para demonstração. Com Supabase configurado, o acesso é validado pelo CNPJ no servidor.</p>
+      <p style={{ color:"var(--muted)", fontSize:12, margin:"20px 0 0", lineHeight:1.5 }}>Seu acesso é vinculado ao CNPJ da empresa. O endereço técnico de autenticação permanece interno.</p>
+      <Link href="/login/escritorio" style={{ display:"block", marginTop:16, color:"var(--muted)", fontSize:13, textAlign:"center" }}>Acesso do escritório</Link>
     </section>
   </main>;
 }

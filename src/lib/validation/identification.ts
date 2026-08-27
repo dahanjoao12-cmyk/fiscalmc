@@ -10,7 +10,7 @@ export function isValidCpf(value: string) {
 // CNPJ alfanumérico: 12 posições base36 + 2 dígitos numéricos, conforme Receita Federal.
 export function isValidCnpj(value: string) {
   const cnpj = normalizeTaxId(value);
-  if (!/^[A-Z0-9]{12}\d{2}$/.test(cnpj)) return false;
+  if (!/^[A-Z0-9]{12}\d{2}$/.test(cnpj) || /^(.)\1+$/.test(cnpj)) return false;
   const weights = [6,5,4,3,2,9,8,7,6,5,4,3,2];
   const numericValue = (char:string) => char.charCodeAt(0) - 48;
   const check = (base:string) => { const aligned = weights.slice(weights.length - base.length); const sum = [...base].reduce((total,char,index) => total + numericValue(char) * aligned[index],0); const mod = sum % 11; return mod < 2 ? 0 : 11 - mod; };
