@@ -18,7 +18,7 @@ export type FiscalDocumentDomain = {
   dps: { series: string; number: bigint; identifier: string };
 };
 
-export type IssueRequest = { document: FiscalDocumentDomain; idempotencyKey: string; scenario?: "success" | "rejection" | "timeout" };
+export type IssueRequest = { document: FiscalDocumentDomain; idempotencyKey: string; organizationId?:string; preparedPayload?:{dpsXmlGZipB64:string}; scenario?: "success" | "rejection" | "timeout" };
 export type IssueResult = { status: "ISSUED"; accessKey: string; nfseNumber: string; officialXml: string } | { status: "REJECTED"; code: string; safeMessage: string; technicalMessage: string } | { status: "UNKNOWN"; dpsIdentifier: string; safeMessage: string };
 
 export interface NFSeProvider {

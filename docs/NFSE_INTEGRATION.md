@@ -48,6 +48,25 @@ pnpm nfse:test-dps
 
 O smoke usa somente fixture sanitizada e o A1 local para assinatura; ele não imprime chave privada, PFX ou senha, e termina com `TRANSMISSION: BLOCKED`.
 
+## Transmissão e reconciliação fail-closed
+
+Antes do primeiro byte de uma emissão, `claim_invoice_submission` bloqueia a
+invoice em `SUBMITTING` e cria o `invoice_attempt` `STARTED` na mesma transação.
+Falhas comprovadamente anteriores ao envio podem retornar a `READY`; qualquer
+possibilidade de entrega deixa a invoice em `UNKNOWN`. O replay da mesma chave
+de idempotência nunca retransmite `UNKNOWN` ou `SUBMITTING`.
+
+`reconcileUnknownInvoice()` usa exclusivamente o A1 armazenado da organização e
+os endpoints oficiais de leitura `GET /dps/{id}` e `GET /nfse/{chaveAcesso}` em
+Produção Restrita. Uma consulta inconclusiva mantém `UNKNOWN` e não dispara novo
+`POST /nfse`.
+
+Mesmo com o onboarding completo, o transporte exige simultaneamente
+`NFSE_PROVIDER=national`, `NFSE_ENV=production_restricted`,
+`ENABLE_NFSE_PRODUCTION=false`, `ENABLE_NFSE_RESTRICTED_TRANSMISSION=true` e
+`emission_blocked=false`. A última variável e o desbloqueio da empresa só podem
+ser alterados após autorização explícita para a primeira transmissão.
+
 ## Pendente para homologação
 
 1. empresa real autorizada e aderente ao emissor nacional;

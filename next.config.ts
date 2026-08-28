@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // Native XSD validation must be loaded by Node at runtime, not bundled by
+  // Turbopack into the Route Handler output.
+  serverExternalPackages: ["libxmljs2"],
   async headers() {
     return [{
       source: "/(.*)",
