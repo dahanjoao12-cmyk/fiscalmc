@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Check, Eye, FileCheck2, LoaderCircle, Send, UserPlus, WifiOff } from "lucide-react";
 import { useState } from "react";
+import { getInvoicePresentation } from "@/lib/invoices/presentation";
 
 export type IssueCustomer = { id: string; legalName: string; taxId?: string | null };
 export type IssueService = { id: string; name: string; defaultDescription?: string | null };
@@ -33,6 +34,11 @@ export function IssueForm({ customers, services, mock = false }: Props) {
     try {
       const response = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ customerId: selectedCustomerId, serviceTemplateId: selectedServiceTemplateId, amount: amount.replace(/\./g, "").replace(",", "."), serviceDate: date, description, ...(mock ? { scenario: "success" } : {}) }) });
       const payload = await response.json() as Result & { error?: string };
+      if (payload.status === "REJECTED" || payload.status === "UNKNOWN" || payload.status === "ISSUED") {
+        setResult(payload);
+        setIdempotencyKey(crypto.randomUUID());
+        return;
+      }
       if (!response.ok) throw new Error(payload.error ?? payload.safeMessage ?? "Não foi possível concluir a emissão.");
       setResult(payload);
       setIdempotencyKey(crypto.randomUUID());
@@ -40,7 +46,11 @@ export function IssueForm({ customers, services, mock = false }: Props) {
     finally { setSubmitting(false); }
   }
 
-  if (result) return <section className="v2-result-panel"><span><FileCheck2 size={25} /></span><h2>{result.status === "ISSUED" ? "NFS-e emitida" : result.status === "UNKNOWN" ? "Situação em confirmação" : "Emissão não concluída"}</h2><p>{result.status === "UNKNOWN" ? "Estamos confirmando a situação desta nota." : result.safeMessage}</p></section>;
+  if (result) {
+    const presentation = getInvoicePresentation(result.status, result.safeMessage);
+    const detailHref = result.invoiceId && !mock ? `/app/notas/${result.invoiceId}` : null;
+    return <section className={`v2-result-panel is-${presentation.tone}`} role="status" aria-live="polite"><span><FileCheck2 size={25} aria-hidden /></span><div><h2>{presentation.title}</h2><p>{presentation.description}</p>{result.status === "ISSUED" ? <dl className="v2-result-summary"><div><dt>Tomador</dt><dd>{customer?.legalName ?? "—"}</dd></div><div><dt>Valor</dt><dd>{amount ? `R$ ${amount}` : "—"}</dd></div><div><dt>Data</dt><dd>{date ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`)) : "—"}</dd></div></dl> : null}{result.status === "UNKNOWN" ? <p className="v2-result-note">Você pode sair desta tela. A nota continuará sendo acompanhada pelo sistema.</p> : null}<div className="v2-result-actions">{detailHref ? <Link className="button primary" href={detailHref}>Ver nota</Link> : null}{result.status === "UNKNOWN" && detailHref ? <Link className="button secondary" href={detailHref}>Acompanhar situação</Link> : null}{result.status !== "UNKNOWN" ? <button className="button secondary" type="button" onClick={() => { setResult(null); setPreview(false); setError(""); setIdempotencyKey(crypto.randomUUID()); }}>Emitir outra NFS-e</button> : null}</div></div></section>;
+  }
   if (!services.length) return <section className="v2-empty v2-panel"><strong>Nenhum serviço está disponível para emissão.</strong><p>Entre em contato com o escritório para revisar os serviços fiscais.</p></section>;
 
   return <section className="v2-issue-flow">

@@ -54,15 +54,15 @@ test("modo mock explícito permite pré-visualizar sem dados fiscais técnicos",
   await loginAsClient(page);
   await page.goto("/app/emitir");
 
-  await expect(page.getByLabel("Tomador")).toBeVisible();
-  await expect(page.getByLabel("Serviço", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Tomador do serviço")).toBeVisible();
+  await expect(page.getByLabel("Serviço prestado")).toBeVisible();
   await expect(page.getByText("cTribNac")).toHaveCount(0);
   await expect(page.getByText("alíquota ISS")).toHaveCount(0);
 
-  await page.getByLabel("Valor total da NFS-e").fill("125,00");
-  await page.getByRole("button", { name: "Pré-visualizar NFS-e" }).click();
+  await page.getByLabel("Valor total").fill("125,00");
+  await page.getByRole("button", { name: "Revisar emissão" }).click();
 
-  await expect(page.getByRole("heading", { name: "Pré-visualização da NFS-e" })).toBeVisible();
+  await expect(page.getByText("Dados revisados. A nota está pronta para envio.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Emitir NFS-e" })).toBeEnabled();
 });
 
@@ -70,10 +70,10 @@ test("a auditoria de interface não transmite uma NFS-e", async ({ page }) => {
   test.skip(!hasClientE2eCredentials, "Requer credenciais CLIENT_USER configuradas em E2E_*.");
   await loginAsClient(page);
   await page.goto("/app/emitir");
-  await page.getByLabel("Valor total da NFS-e").fill("125,00");
-  await page.getByRole("button", { name: "Pré-visualizar NFS-e" }).click();
+  await page.getByLabel("Valor total").fill("125,00");
+  await page.getByRole("button", { name: "Revisar emissão" }).click();
 
-  await expect(page.getByText("Pré-visualização da NFS-e")).toBeVisible();
+  await expect(page.getByText("Dados revisados. A nota está pronta para envio.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Emitir NFS-e" })).toBeEnabled();
 });
 
@@ -172,7 +172,7 @@ test("cliente envia serviço e escritório conclui a validação fiscal", async 
   await page.goto("/app/servicos");
   await expect(page.locator("article").filter({ hasText: serviceName }).getByText("Pronto para emitir", { exact: true })).toBeVisible();
   await page.goto("/app/emitir");
-  await expect(page.getByLabel("Serviço", { exact: true }).locator(`option:has-text("${serviceName}")`)).toHaveCount(1);
+  await expect(page.getByLabel("Serviço prestado").locator(`option:has-text("${serviceName}")`)).toHaveCount(1);
 });
 
 test("escritório solicita informação e cliente corrige e reenvia", async ({ page }) => {
