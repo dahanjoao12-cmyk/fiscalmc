@@ -7,7 +7,7 @@ const errors: Record<string, string> = { invalid_credentials: "Email ou senha in
 
 export default async function OfficeLoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
-  return <main className="auth-page"><section className="auth-card">
+  return <main className="auth-layout"><aside className="auth-brand-panel"><Brand inverse/><div><h2>Operação fiscal em um só lugar.</h2><p>Gerencie empresas, prontidão, certificados e emissões com segurança.</p></div><small>Ambiente exclusivo do escritório</small></aside><section className="auth-card">
     <Brand />
     <h1>Acesso do escritório</h1>
     <p>Área administrativa para a equipe Moreira &amp; Castro.</p>

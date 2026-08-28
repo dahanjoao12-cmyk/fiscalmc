@@ -1,3 +1,65 @@
-import Link from "next/link";import { Building2,Clock3,FileCheck2,Plus } from "lucide-react";import { redirect } from "next/navigation";import { requireOfficeSession } from "@/lib/auth/session";import { createAdminClient } from "@/lib/supabase/admin";
-export default async function AdminPage(){try{await requireOfficeSession();}catch{redirect('/app?notice=office');}const db=createAdminClient();const[{data:companies},{count:issued},{count:unknown},{count:rejected}]=await Promise.all([db.from('organizations').select('id,legal_name,emission_blocked,status').order('created_at',{ascending:false}),db.from('invoices').select('id',{count:'exact',head:true}).eq('status','ISSUED'),db.from('invoices').select('id',{count:'exact',head:true}).eq('status','UNKNOWN'),db.from('invoices').select('id',{count:'exact',head:true}).eq('status','REJECTED')]);const attention=(companies??[]).filter(x=>x.emission_blocked||x.status!=='ACTIVE');return <div className="page"><div className="page-heading"><div><h1>Visão geral</h1><p>Acompanhe a operação fiscal das empresas.</p></div><Link href="/admin/empresas/nova" className="button primary"><Plus size={18}/>Nova empresa</Link></div><div className="metrics admin-metrics"><Metric icon={<Building2/>} label="Empresas" value={String(companies?.length??0)}/><Metric icon={<FileCheck2/>} label="Notas emitidas" value={String(issued??0)}/><Metric icon={<Clock3/>} label="Resultado incerto" value={String(unknown??0)} tone="warning"/><Metric icon={<Clock3/>} label="Rejeitadas" value={String(rejected??0)} tone="error"/></div><section className="section"><h2 className="section-title">Requer atenção</h2>{attention.length?attention.map(item=><Link href={`/admin/empresas/${item.id}`} className="row attention-row" key={item.id}><span>!</span><strong>{item.legal_name}</strong><span>{item.emission_blocked?'Emissão bloqueada até concluir a prontidão.':`Status ${item.status}`}</span><span>→</span></Link>):<div className="empty-state"><strong>Nenhuma empresa requer atenção.</strong></div>}</section></div>}
-function Metric({icon,label,value,tone}:{icon:React.ReactNode;label:string;value:string;tone?:'warning'|'error'}){return <div className="metric admin-metric"><div><div className="metric-label">{label}</div><div className="metric-value">{value}</div></div><span className={tone??''}>{icon}</span></div>}
+import Link from "next/link";
+import { ArrowUpRight, Building2, Ellipsis, FilePlus2, Plus } from "lucide-react";
+import { redirect } from "next/navigation";
+import { requireOfficeSession } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { MetricTile, PageHeader, StatusBadge, formatDateTime, formatTaxId } from "@/components/ui-kit";
+
+export default async function AdminPage() {
+  try { await requireOfficeSession(); } catch { redirect("/app?notice=office"); }
+  const db = createAdminClient();
+  const month = new Date().toISOString().slice(0, 7);
+  const [companiesResult, issuedResult, certificatesResult, accessResult, activityResult] = await Promise.all([
+    db.from("organizations").select("id,legal_name,tax_id,municipality_code,state,status,emission_blocked,created_at").order("created_at", { ascending: false }),
+    db.from("invoices").select("id", { count: "exact", head: true }).eq("status", "ISSUED").gte("service_date", `${month}-01`),
+    db.from("digital_certificates").select("organization_id,status,valid_until").is("replaced_at", null),
+    db.from("client_accesses").select("organization_id,enabled"),
+    db.from("invoices").select("organization_id,created_at").order("created_at", { ascending: false }).limit(500),
+  ]);
+  const companies = companiesResult.data ?? [];
+  const certificates = new Map((certificatesResult.data ?? []).map((item) => [item.organization_id, item]));
+  const accesses = new Map((accessResult.data ?? []).map((item) => [item.organization_id, item]));
+  const activity = new Map<string, string>();
+  for (const item of activityResult.data ?? []) if (!activity.has(item.organization_id)) activity.set(item.organization_id, item.created_at);
+  const active = companies.filter((item) => item.status === "ACTIVE").length;
+  const ready = companies.filter((item) => item.status === "ACTIVE" && !item.emission_blocked).length;
+  const pending = companies.filter((item) => item.emission_blocked || item.status !== "ACTIVE");
+
+  return <div className="page v2-page">
+    <PageHeader title="Visão geral" description="Acompanhe a operação fiscal das empresas e mantenha tudo em dia." actions={<>
+      <Link href="/admin/emissoes" className="button primary"><FilePlus2 size={18} aria-hidden />Emitir NFS-e</Link>
+      <Link href="/admin/empresas/nova" className="button secondary"><Plus size={18} aria-hidden />Nova empresa</Link>
+    </>} />
+    <section className="v2-metrics" aria-label="Indicadores do escritório">
+      <MetricTile label="Empresas ativas" value={String(active)} />
+      <MetricTile label="Prontas para emitir" value={String(ready)} />
+      <MetricTile label="Pendências" value={String(pending.length)} tone={pending.length ? "warning" : "default"} />
+      <MetricTile label="Notas emitidas no mês" value={String(issuedResult.count ?? 0)} />
+    </section>
+    <section className="v2-panel v2-table-panel">
+      <div className="v2-panel-heading"><div><h2>Empresas</h2><p>Visão operacional das organizações atendidas.</p></div><Link className="v2-text-action" href="/admin/empresas">Ver todas</Link></div>
+      <div className="v2-table-scroll"><table className="v2-table">
+        <thead><tr><th>Empresa</th><th>CNPJ</th><th>Município</th><th>Situação</th><th>Certificado</th><th>Acesso</th><th>Última atividade</th><th><span className="sr-only">Ações</span></th></tr></thead>
+        <tbody>{companies.slice(0, 8).map((company) => {
+          const certificate = certificates.get(company.id);
+          const access = accesses.get(company.id);
+          return <tr key={company.id}>
+            <td><Link className="v2-table-primary" href={`/admin/empresas/${company.id}`}>{company.legal_name}</Link></td>
+            <td>{formatTaxId(company.tax_id)}</td>
+            <td>{company.municipality_code}{company.state ? ` / ${company.state}` : ""}</td>
+            <td><StatusBadge tone={company.emission_blocked ? "warning" : "success"}>{company.emission_blocked ? "Requer atenção" : "Ativa"}</StatusBadge></td>
+            <td><StatusBadge tone={!certificate ? "neutral" : certificate.status === "VALID" ? "success" : "warning"}>{!certificate ? "Não cadastrado" : certificate.status === "VALID" ? "Válido" : "Revisar"}</StatusBadge></td>
+            <td><StatusBadge tone={access?.enabled ? "success" : "neutral"}>{access?.enabled ? "Ativo" : "Pendente"}</StatusBadge></td>
+            <td>{formatDateTime(activity.get(company.id) ?? company.created_at)}</td>
+            <td><div className="v2-row-actions"><Link title="Abrir empresa" href={`/admin/empresas/${company.id}`}><ArrowUpRight size={17} /></Link><Link title="Emitir por esta empresa" href={`/admin/empresas/${company.id}?tab=issue`}><FilePlus2 size={17} /></Link><Link title="Mais opções" href={`/admin/empresas/${company.id}`}><Ellipsis size={18} /></Link></div></td>
+          </tr>;
+        })}</tbody>
+      </table></div>
+      {!companies.length ? <div className="v2-empty"><Building2 size={22} /><strong>Nenhuma empresa cadastrada.</strong></div> : null}
+    </section>
+    <section className="v2-panel v2-pending-panel">
+      <div className="v2-panel-heading"><div><h2>Pendências</h2><p>Itens que precisam de atenção antes da emissão.</p></div></div>
+      {pending.length ? <div className="v2-pending-list">{pending.slice(0, 5).map((item) => <Link href={`/admin/empresas/${item.id}`} key={item.id}><span className="v2-attention-mark">!</span><span><strong>{item.legal_name}</strong><small>{item.emission_blocked ? "Onboarding ou liberação de emissão pendente." : `Status atual: ${item.status}.`}</small></span><ArrowUpRight size={17} /></Link>)}</div> : <div className="v2-empty compact"><strong>Nenhuma pendência operacional.</strong></div>}
+    </section>
+  </div>;
+}

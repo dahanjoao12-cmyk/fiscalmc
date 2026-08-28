@@ -1,4 +1,21 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+const accessE2e = {
+  officeEmail: process.env.E2E_OFFICE_EMAIL,
+  officePassword: process.env.E2E_OFFICE_PASSWORD,
+  organizationId: process.env.E2E_TEST_ORGANIZATION_ID,
+  clientCnpj: process.env.E2E_TEST_CLIENT_CNPJ,
+  clientPassword: process.env.E2E_TEST_CLIENT_PASSWORD,
+};
+const hasClientE2eCredentials = Boolean(accessE2e.clientCnpj && accessE2e.clientPassword);
+
+async function loginAsClient(page: Page) {
+  await page.goto("/login");
+  await page.getByLabel("CNPJ").fill(accessE2e.clientCnpj!);
+  await page.getByLabel("Senha").fill(accessE2e.clientPassword!);
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/);
+}
 
 test("visitante sem sessão é direcionado ao login", async ({ page }) => {
   await page.goto("/app");
@@ -12,6 +29,8 @@ test("login do cliente pede somente CNPJ e senha", async ({ page }) => {
   await expect(page.getByLabel("Senha")).toBeVisible();
   await expect(page.getByLabel("Email")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Acesso do escritório" })).toHaveAttribute("href", "/login/escritorio");
+  const dimensions = await page.evaluate(() => ({ viewport: window.innerWidth, content: document.documentElement.scrollWidth }));
+  expect(dimensions.content).toBeLessThanOrEqual(dimensions.viewport);
 });
 
 test("login administrativo permanece separado", async ({ page }) => {
@@ -22,6 +41,8 @@ test("login administrativo permanece separado", async ({ page }) => {
 });
 
 test("modo mock explícito permite pré-visualizar sem dados fiscais técnicos", async ({ page }) => {
+  test.skip(!hasClientE2eCredentials, "Requer credenciais CLIENT_USER configuradas em E2E_*.");
+  await loginAsClient(page);
   await page.goto("/app/emitir");
 
   await expect(page.getByLabel("Tomador")).toBeVisible();
@@ -37,6 +58,8 @@ test("modo mock explícito permite pré-visualizar sem dados fiscais técnicos",
 });
 
 test("a auditoria de interface não transmite uma NFS-e", async ({ page }) => {
+  test.skip(!hasClientE2eCredentials, "Requer credenciais CLIENT_USER configuradas em E2E_*.");
+  await loginAsClient(page);
   await page.goto("/app/emitir");
   await page.getByLabel("Valor total da NFS-e").fill("125,00");
   await page.getByRole("button", { name: "Pré-visualizar NFS-e" }).click();
@@ -46,20 +69,14 @@ test("a auditoria de interface não transmite uma NFS-e", async ({ page }) => {
 });
 
 test("navegação se adapta ao viewport", async ({ page }) => {
+  test.skip(!hasClientE2eCredentials, "Requer credenciais CLIENT_USER configuradas em E2E_*.");
+  await loginAsClient(page);
   await page.goto("/app/emitir");
   const mobile = await page.evaluate(() => window.innerWidth <= 800);
 
   await expect(page.locator(".sidebar")).toHaveCSS("display", mobile ? "none" : "flex");
   await expect(page.locator(".mobile-nav")).toHaveCSS("display", mobile ? "grid" : "none");
 });
-
-const accessE2e = {
-  officeEmail: process.env.E2E_OFFICE_EMAIL,
-  officePassword: process.env.E2E_OFFICE_PASSWORD,
-  organizationId: process.env.E2E_TEST_ORGANIZATION_ID,
-  clientCnpj: process.env.E2E_TEST_CLIENT_CNPJ,
-  clientPassword: process.env.E2E_TEST_CLIENT_PASSWORD,
-};
 
 test("office cria, bloqueia, reativa e redefine acesso de uma organização exclusiva de E2E", async ({ page }) => {
   test.skip(Object.values(accessE2e).some((value) => !value), "Requer credenciais e organização isolada configuradas em E2E_*.");

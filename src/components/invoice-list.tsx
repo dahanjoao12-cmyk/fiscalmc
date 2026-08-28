@@ -1,6 +1,18 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
-export type InvoiceRow={id:string;number:string;customer:string;service:string;amountCents:number;status:string;date:string};
-const clientLabels:Record<string,string>={ISSUED:"Emitida",REJECTED:"Rejeitada",UNKNOWN:"Em confirmação",CANCELLED:"Cancelada",SUBMITTING:"Em processamento",READY:"Em processamento",DRAFT:"Em processamento"};
-const adminLabels:Record<string,string>={...clientLabels,UNKNOWN:"Verificação necessária"};
-export function InvoiceList({rows,all=false,admin=false}:{rows:InvoiceRow[];all?:boolean;admin?:boolean}){const visible=all?rows:rows.slice(0,4);const href=(id:string)=>admin?`/admin/notas?invoice=${id}`:`/app/notas/${id}`;const labels=admin?adminLabels:clientLabels;return <section className="section"><h2 className="section-title">{all?'Notas fiscais':'Notas recentes'}</h2><div className="row header"><span>Nº da nota</span><span>Tomador</span><span>Serviço</span><span>Valor</span><span>Status</span><span>Data</span><span/></div>{visible.length?visible.map(invoice=><Link href={href(invoice.id)} className="row" key={invoice.id}><span>{invoice.number}</span><strong>{invoice.customer}</strong><span>{invoice.service}</span><span>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(invoice.amountCents/100)}</span><span className={`status ${invoice.status==='REJECTED'?'error':invoice.status==='UNKNOWN'||invoice.status==='READY'?'warning':''}`}>{labels[invoice.status]??invoice.status}</span><span>{new Intl.DateTimeFormat('pt-BR').format(new Date(`${invoice.date}T12:00:00`))}</span><ChevronRight size={17} aria-hidden /></Link>):<div className="empty-state"><strong>Nenhuma nota encontrada.</strong><p>As emissões reais aparecerão aqui.</p></div>}{!all&&<div className="section-footer"><Link href={admin?'/admin/notas':'/app/notas'}>Ver todas as notas fiscais →</Link></div>}</section>}
+import { ArrowUpRight, FilePlus2 } from "lucide-react";
+import { EmptyState, StatusBadge, formatCurrency, formatDate } from "./ui-kit";
+
+export type InvoiceRow = { id: string; number: string; customer: string; service: string; amountCents: number; status: string; date: string; company?: string; createdAt?: string };
+const clientLabels: Record<string, string> = { ISSUED: "Emitida", REJECTED: "Rejeitada", UNKNOWN: "Em confirmação", CANCELLED: "Cancelada", SUBMITTING: "Em análise", READY: "Em análise", DRAFT: "Em preparação" };
+const adminLabels: Record<string, string> = { ...clientLabels, UNKNOWN: "Verificação necessária" };
+function tone(status: string): "success" | "warning" | "danger" | "info" | "neutral" { if (status === "ISSUED") return "success"; if (status === "REJECTED" || status === "CANCELLED") return "danger"; if (status === "UNKNOWN") return "warning"; if (status === "READY" || status === "SUBMITTING") return "info"; return "neutral"; }
+
+export function InvoiceList({ rows, all = false, admin = false }: { rows: InvoiceRow[]; all?: boolean; admin?: boolean }) {
+  const visible = all ? rows : rows.slice(0, 5);
+  const href = (id: string) => admin ? `/admin/notas/${id}` : `/app/notas/${id}`;
+  const labels = admin ? adminLabels : clientLabels;
+  return <section className="v2-panel v2-table-panel invoice-table-panel">
+    <div className="v2-panel-heading"><div><h2>{all ? "Notas fiscais" : "Últimas notas"}</h2><p>{all ? "Histórico de emissões e tentativas." : "Movimentações mais recentes da empresa."}</p></div>{!all ? <Link className="v2-text-action" href={admin ? "/admin/notas" : "/app/notas"}>Ver todas</Link> : null}</div>
+    {visible.length ? <div className="v2-table-scroll"><table className="v2-table"><thead><tr><th>Número</th>{admin ? <th>Empresa</th> : null}<th>Tomador</th><th>Serviço</th><th>Competência</th><th>Valor</th><th>Status</th><th><span className="sr-only">Ação</span></th></tr></thead><tbody>{visible.map((invoice) => <tr key={invoice.id}><td className="v2-table-primary">{invoice.number}</td>{admin ? <td>{invoice.company ?? "—"}</td> : null}<td>{invoice.customer}</td><td>{invoice.service}</td><td>{formatDate(invoice.date)}</td><td>{formatCurrency(invoice.amountCents)}</td><td><StatusBadge tone={tone(invoice.status)}>{labels[invoice.status] ?? invoice.status}</StatusBadge></td><td><Link className="v2-icon-action" href={href(invoice.id)} title="Abrir nota"><ArrowUpRight size={17} /></Link></td></tr>)}</tbody></table></div> : <EmptyState title="Nenhuma nota encontrada" description="As emissões reais aparecerão aqui." action={!admin ? <Link className="button primary" href="/app/emitir"><FilePlus2 size={17} />Emitir NFS-e</Link> : undefined} />}
+  </section>;
+}
