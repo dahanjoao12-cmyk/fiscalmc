@@ -8,6 +8,15 @@ const accessE2e = {
   clientPassword: process.env.E2E_TEST_CLIENT_PASSWORD,
 };
 const hasClientE2eCredentials = Boolean(accessE2e.clientCnpj && accessE2e.clientPassword);
+const serviceWorkflowE2e = {
+  enabled: process.env.E2E_ENABLE_SERVICE_MUTATIONS === "true",
+  nationalCode: process.env.E2E_SERVICE_NATIONAL_CODE,
+  dpsMunicipalCode: process.env.E2E_SERVICE_DPS_MUNICIPAL_CODE,
+  dpsCodeSource: process.env.E2E_SERVICE_DPS_CODE_SOURCE,
+};
+const hasServiceWorkflowE2e = serviceWorkflowE2e.enabled
+  && Boolean(accessE2e.officeEmail && accessE2e.officePassword && accessE2e.clientCnpj && accessE2e.clientPassword)
+  && Boolean(serviceWorkflowE2e.nationalCode && serviceWorkflowE2e.dpsMunicipalCode && serviceWorkflowE2e.dpsCodeSource);
 
 async function loginAsClient(page: Page) {
   await page.goto("/login");
@@ -126,4 +135,78 @@ test("office cria, bloqueia, reativa e redefine acesso de uma organização excl
   await page.goto(`/admin/empresas/${accessE2e.organizationId}?tab=users`);
   await page.getByRole("button", { name: "Reativar acesso" }).click();
   await expect(page.getByText("Ativo", { exact: true })).toBeVisible();
+});
+
+test("cliente envia serviço e escritório conclui a validação fiscal", async ({ page }) => {
+  test.skip(!hasServiceWorkflowE2e, "Requer organização isolada e E2E_ENABLE_SERVICE_MUTATIONS=true.");
+  const serviceName = `Serviço E2E ${Date.now()}`;
+
+  await loginAsClient(page);
+  await page.goto("/app/servicos");
+  await page.getByRole("button", { name: "Novo serviço" }).first().click();
+  await page.getByLabel("Nome do serviço").fill(serviceName);
+  await page.getByLabel("Descrição padrão").fill("Serviço controlado para validar o workflow E2E.");
+  await page.getByRole("button", { name: /Salvar serviço/ }).click();
+  const clientRow = page.locator("article").filter({ hasText: serviceName });
+  await clientRow.getByRole("button", { name: "Enviar para validação" }).click();
+  await expect(clientRow.getByText("Em análise", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Sair" }).click();
+
+  await page.goto("/login/escritorio");
+  await page.getByLabel("Email").fill(accessE2e.officeEmail!);
+  await page.getByLabel("Senha").fill(accessE2e.officePassword!);
+  await page.getByRole("button", { name: "Entrar no escritório" }).click();
+  await page.goto(`/admin/servicos?status=PENDING_REVIEW&q=${encodeURIComponent(serviceName)}`);
+  await page.getByRole("link", { name: /Analisar/ }).click();
+  await page.getByPlaceholder("Buscar código ou descrição no catálogo nacional").fill(serviceWorkflowE2e.nationalCode!);
+  await page.locator(".catalog-option").filter({ hasText: serviceWorkflowE2e.nationalCode! }).first().click();
+  await page.locator('input[name="municipal-mapping"]').first().check();
+  await page.getByLabel(/Código DPS municipal/).fill(serviceWorkflowE2e.dpsMunicipalCode!);
+  await page.getByLabel("Fonte do código DPS municipal").fill(serviceWorkflowE2e.dpsCodeSource!);
+  await page.getByRole("button", { name: "Salvar configuração" }).click();
+  await page.getByRole("button", { name: "Aprovar serviço" }).click();
+  await expect(page.getByText("Pronto para emitir", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Sair" }).click();
+
+  await loginAsClient(page);
+  await page.goto("/app/servicos");
+  await expect(page.locator("article").filter({ hasText: serviceName }).getByText("Pronto para emitir", { exact: true })).toBeVisible();
+  await page.goto("/app/emitir");
+  await expect(page.getByLabel("Serviço", { exact: true }).locator(`option:has-text("${serviceName}")`)).toHaveCount(1);
+});
+
+test("escritório solicita informação e cliente corrige e reenvia", async ({ page }) => {
+  test.skip(!serviceWorkflowE2e.enabled || !hasClientE2eCredentials || !accessE2e.officeEmail || !accessE2e.officePassword, "Requer organização isolada e E2E_ENABLE_SERVICE_MUTATIONS=true.");
+  const serviceName = `Serviço E2E informação ${Date.now()}`;
+  const requestMessage = "Confirme se o serviço é prestado no município informado.";
+
+  await loginAsClient(page);
+  await page.goto("/app/servicos");
+  await page.getByRole("button", { name: "Novo serviço" }).first().click();
+  await page.getByLabel("Nome do serviço").fill(serviceName);
+  await page.getByLabel("Descrição padrão").fill("Serviço controlado para testar pedido de informação.");
+  await page.getByRole("button", { name: /Salvar serviço/ }).click();
+  await page.locator("article").filter({ hasText: serviceName }).getByRole("button", { name: "Enviar para validação" }).click();
+  await page.getByRole("button", { name: "Sair" }).click();
+
+  await page.goto("/login/escritorio");
+  await page.getByLabel("Email").fill(accessE2e.officeEmail!);
+  await page.getByLabel("Senha").fill(accessE2e.officePassword!);
+  await page.getByRole("button", { name: "Entrar no escritório" }).click();
+  await page.goto(`/admin/servicos?status=PENDING_REVIEW&q=${encodeURIComponent(serviceName)}`);
+  await page.getByRole("link", { name: /Analisar/ }).click();
+  await page.getByLabel("Mensagem para o cliente").fill(requestMessage);
+  await page.getByRole("button", { name: "Solicitar informação" }).click();
+  await page.getByRole("button", { name: "Sair" }).click();
+
+  await loginAsClient(page);
+  await page.goto("/app/servicos");
+  const clientRow = page.locator("article").filter({ hasText: serviceName });
+  await expect(clientRow.getByText("Precisa de informação", { exact: true })).toBeVisible();
+  await expect(clientRow.getByText(requestMessage)).toBeVisible();
+  await clientRow.getByRole("button", { name: "Editar" }).click();
+  await page.getByLabel(/Observação para o escritório/).fill("Confirmado: prestação habitual no município informado.");
+  await page.getByRole("button", { name: /Salvar serviço/ }).click();
+  await page.locator("article").filter({ hasText: serviceName }).getByRole("button", { name: "Reenviar" }).click();
+  await expect(page.locator("article").filter({ hasText: serviceName }).getByText("Em análise", { exact: true })).toBeVisible();
 });

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type NavKey="home"|"issue"|"emissions"|"invoices"|"customers"|"companies"|"certificates"|"logs"|"settings"|"profile";
+type NavKey="home"|"issue"|"emissions"|"invoices"|"customers"|"companies"|"services"|"certificates"|"logs"|"settings"|"profile";
 
 function activeKey(pathname:string):NavKey{
   if(pathname.startsWith("/admin/empresas"))return "companies";
+  if(pathname.startsWith("/admin/servicos"))return "services";
   if(pathname.startsWith("/admin/emissoes"))return "emissions";
   if(pathname.startsWith("/admin/notas"))return "invoices";
   if(pathname.startsWith("/admin/tomadores"))return "customers";
@@ -17,6 +18,7 @@ function activeKey(pathname:string):NavKey{
   if(pathname.startsWith("/app/emitir"))return "issue";
   if(pathname.startsWith("/app/notas"))return "invoices";
   if(pathname.startsWith("/app/tomadores"))return "customers";
+  if(pathname.startsWith("/app/servicos"))return "services";
   if(pathname.startsWith("/app/perfil"))return "profile";
   return "home";
 }

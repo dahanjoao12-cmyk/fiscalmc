@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { Building2, FileCheck2, FilePlus2, FileText, Home, LogOut, ScrollText, Settings, ShieldCheck, UserRound, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, Building2, FileCheck2, FilePlus2, FileText, Home, LogOut, ScrollText, Settings, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { Brand } from "./brand";
 import { ShellNavLink } from "./shell-nav-link";
 import { getShellIdentity } from "@/lib/auth/session";
@@ -13,11 +13,13 @@ const clientNav = [
   ["issue", "/app/emitir", "Emitir NFS-e", FilePlus2],
   ["invoices", "/app/notas", "Notas fiscais", FileText],
   ["customers", "/app/tomadores", "Tomadores", UsersRound],
+  ["services", "/app/servicos", "Meus serviços", BriefcaseBusiness],
   ["profile", "/app/perfil", "Perfil", UserRound]
 ] as const;
 const adminNav = [
   ["home", "/admin", "Visão geral", Home],
   ["companies", "/admin/empresas", "Empresas", Building2],
+  ["services", "/admin/servicos", "Validação de serviços", BriefcaseBusiness],
   ["emissions", "/admin/emissoes", "Emissões", FilePlus2],
   ["invoices", "/admin/notas", "Notas", FileText],
   ["customers", "/admin/tomadores", "Tomadores", UsersRound],
@@ -85,6 +87,7 @@ function mobileLabel(key: string, label: string) {
   if (key === "settings") return "Ajustes";
   if (key === "certificates") return "A1";
   if (key === "emissions") return "Emitir";
+  if (key === "services") return "Serviços";
   if (label === "Visão geral") return "Visão";
   return label;
 }
