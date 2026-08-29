@@ -10,7 +10,7 @@ async function organizationExists(organizationId:string){
   return data;
 }
 async function writeAudit(action:"tax_profile_created"|"tax_profile_updated"|"tax_profile_reviewed",organizationId:string,actor:string){
-  await createAdminClient().from("audit_logs").insert({organization_id:organizationId,actor_user_id:actor,action,entity:"tax_profile",entity_id:organizationId,safe_metadata:{}});
+  await createAdminClient().from("audit_logs").insert({organization_id:organizationId,actor_user_id:actor,actor_type:"OFFICE",action,entity:"tax_profile",entity_id:organizationId,safe_metadata:{}});
 }
 export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}){
   try{

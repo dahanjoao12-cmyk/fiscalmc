@@ -442,6 +442,18 @@ textarea.input { min-height:92px; }
 .v2-result-summary dd { margin:4px 0 0; color:var(--navy); font-size:12px; font-weight:750; }
 .v2-result-note { margin-top:14px!important; font-size:12px; line-height:1.5; }
 .v2-result-actions,.v2-document-actions { margin-top:18px; display:flex; flex-wrap:wrap; gap:10px; }
+.cancellation-request { display:grid; gap:8px; }
+.cancellation-request > p,.v2-cancellation-status { margin:0; color:var(--muted); font-size:12px; }
+.v2-inline-dialog { width:min(540px,100%); margin-top:10px; padding:18px; display:grid; gap:12px; border:1px solid #efc3a6; border-radius:8px; background:#fffaf5; }
+.v2-inline-dialog label { display:grid; gap:7px; color:var(--navy); font-size:12px; font-weight:750; }
+.v2-inline-dialog textarea { min-height:100px; padding:10px; resize:vertical; }
+.v2-inline-dialog p { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+.v2-inline-dialog > div { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+.cancellation-office-actions { justify-content:flex-start; flex-wrap:wrap; }
+.cancellation-office-actions small { flex-basis:100%; color:var(--muted); font-size:11px; }
+.v2-cell-description { max-width:300px; white-space:normal; line-height:1.45; }
+.v2-log-details summary { cursor:pointer; color:var(--orange-dark); font-size:12px; font-weight:700; }
+.v2-log-details pre { max-width:360px; margin:8px 0 0; padding:8px; overflow:auto; border:1px solid var(--border); border-radius:5px; color:#405568; background:#fafbfd; font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; }
 .v2-client-hero { padding:26px 28px; display:flex; align-items:center; justify-content:space-between; gap:24px; color:#fff; background:var(--navy); border-radius:9px; }
 .v2-client-hero h2 { margin:0; font-size:22px; }
 .v2-client-hero p { max-width:650px; margin:7px 0 0; color:#c9d8e5; font-size:13px; line-height:1.5; }
@@ -620,6 +632,7 @@ textarea.input { min-height:92px; }
   .v2-status-callout .reconciliation-action { grid-column:1/-1; }
   .v2-result-panel { grid-template-columns:1fr; place-items:center; text-align:center; }
   .v2-result-actions { justify-content:center; }
+  .v2-inline-dialog { width:100%; }
   .v2-table-controls { padding:12px 14px; align-items:stretch; }
   .v2-search-field { width:100%; }
   .v2-status-filters { overflow-x:auto; flex-wrap:nowrap; padding-bottom:2px; }

@@ -70,6 +70,7 @@ export async function POST(request: Request) {
     await db.from("audit_logs").insert({
       organization_id: session.organizationId,
       actor_user_id: session.userId,
+      actor_type: "CLIENT",
       action: "client_service_created",
       entity: "service_template",
       entity_id: data.id,
@@ -110,7 +111,7 @@ export async function PATCH(request: Request) {
       const { data, error } = await db.from("service_templates").update({ ...values, updated_at: now })
         .eq("id", input.id).eq("organization_id", session.organizationId).select(clientServiceSelect).single();
       if (error || !data) throw error ?? new Error("CLIENT_SERVICE_SUBMIT_FAILED");
-      await db.from("audit_logs").insert({ organization_id: session.organizationId, actor_user_id: session.userId, action: "client_service_submitted_for_review", entity: "service_template", entity_id: input.id, safe_metadata: {} });
+      await db.from("audit_logs").insert({ organization_id: session.organizationId, actor_user_id: session.userId, actor_type: "CLIENT", action: "client_service_submitted_for_review", entity: "service_template", entity_id: input.id, safe_metadata: {} });
       return NextResponse.json({ service: data });
     }
     const update = buildClientServiceUpdate(record, input, now);
@@ -118,8 +119,8 @@ export async function PATCH(request: Request) {
     const { data, error } = await db.from("service_templates").update({ ...update.values, updated_at: now })
       .eq("id", input.id).eq("organization_id", session.organizationId).select(clientServiceSelect).single();
     if (error || !data) throw error ?? new Error("CLIENT_SERVICE_UPDATE_FAILED");
-    await db.from("audit_logs").insert({ organization_id: session.organizationId, actor_user_id: session.userId, action: "client_service_updated", entity: "service_template", entity_id: input.id, safe_metadata: {} });
-    if (update.reviewReset) await db.from("audit_logs").insert({ organization_id: session.organizationId, actor_user_id: session.userId, action: "service_review_reset", entity: "service_template", entity_id: input.id, safe_metadata: { reason: "client_material_change" } });
+    await db.from("audit_logs").insert({ organization_id: session.organizationId, actor_user_id: session.userId, actor_type: "CLIENT", action: "client_service_updated", entity: "service_template", entity_id: input.id, safe_metadata: {} });
+    if (update.reviewReset) await db.from("audit_logs").insert({ organization_id: session.organizationId, actor_user_id: session.userId, actor_type: "CLIENT", action: "service_review_reset", entity: "service_template", entity_id: input.id, safe_metadata: { reason: "client_material_change" } });
     return NextResponse.json({ service: data });
   } catch (error) {
     return NextResponse.json({ error: error instanceof z.ZodError ? "Revise as informações do serviço." : "Não foi possível atualizar o serviço." }, { status: 422 });

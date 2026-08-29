@@ -15,7 +15,7 @@ export async function POST(_request:Request,context:{params:Promise<{id:string}>
     const{data:invoice}=await createAdminClient().from("invoices").select("organization_id").eq("id",id).maybeSingle();
     if(!invoice)return NextResponse.json({error:"Nota não encontrada."},{status:404});
     const result=await reconcileUnknownInvoice({invoiceId:id,organizationId:invoice.organization_id});
-    await createAdminClient().from("audit_logs").insert({actor_user_id:session.userId,organization_id:invoice.organization_id,action:"invoice_reconciled",entity:"invoice",entity_id:id,request_id:requestId,safe_metadata:{status:result.status}});
+    await createAdminClient().from("audit_logs").insert({actor_user_id:session.userId,actor_type:"OFFICE",organization_id:invoice.organization_id,action:"invoice_reconciled",entity:"invoice",entity_id:id,request_id:requestId,safe_metadata:{status:result.status}});
     return NextResponse.json({status:result.status,message:result.status==="UNKNOWN"?"Ainda não foi possível confirmar a situação desta nota.":"Situação atualizada com sucesso."});
   }catch(error){
     if(error instanceof SafeFiscalError)return NextResponse.json({error:error.safeMessage,code:error.code},{status:error.retryable?503:422});

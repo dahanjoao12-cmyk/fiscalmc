@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type NavKey="home"|"issue"|"emissions"|"invoices"|"customers"|"companies"|"services"|"certificates"|"logs"|"settings"|"profile";
+type NavKey="home"|"issue"|"emissions"|"invoices"|"customers"|"companies"|"services"|"certificates"|"cancellations"|"pending"|"logs"|"settings"|"profile";
 
 function activeKey(pathname:string):NavKey{
   if(pathname.startsWith("/admin/empresas"))return "companies";
@@ -12,6 +12,8 @@ function activeKey(pathname:string):NavKey{
   if(pathname.startsWith("/admin/notas"))return "invoices";
   if(pathname.startsWith("/admin/tomadores"))return "customers";
   if(pathname.startsWith("/admin/certificados"))return "certificates";
+  if(pathname.startsWith("/admin/cancelamentos"))return "cancellations";
+  if(pathname.startsWith("/admin/pendencias"))return "pending";
   if(pathname.startsWith("/admin/logs"))return "logs";
   if(pathname.startsWith("/admin/configuracoes"))return "settings";
   if(pathname.startsWith("/admin"))return "home";

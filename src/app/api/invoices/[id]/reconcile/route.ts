@@ -18,6 +18,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     const result = await reconcileUnknownInvoice({ invoiceId: invoice.id, organizationId: session.organizationId });
     await db.from("audit_logs").insert({
       actor_user_id: session.userId,
+      actor_type: session.role === "CLIENT_USER" ? "CLIENT" : "OFFICE",
       organization_id: session.organizationId,
       action: "invoice_reconciliation_requested",
       entity: "invoice",

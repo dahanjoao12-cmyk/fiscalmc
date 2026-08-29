@@ -77,14 +77,14 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     });
     if(registrationError||!certificateId)throw new CertificateRequestError("CERTIFICATE_STORAGE_FAILED","Não foi possível armazenar o certificado.");
     storagePath=undefined;
-    await db.from("audit_logs").insert({organization_id:organizationId,actor_user_id:session.userId,action:current?"certificate_replaced":"certificate_added",entity:"digital_certificate",entity_id:certificateId,safe_metadata:{status}});
+    await db.from("audit_logs").insert({organization_id:organizationId,actor_user_id:session.userId,actor_type:"OFFICE",action:current?"certificate_replaced":"certificate_added",entity:"digital_certificate",entity_id:certificateId,safe_metadata:{status}});
     return NextResponse.json({certificate:{id:certificateId,subject:validation.metadata.subject,issuer:validation.metadata.issuer,serial:validation.metadata.serial,owner_tax_id:validation.metadata.ownerTaxId,valid_from:validation.metadata.validFrom,valid_until:validation.metadata.validUntil,status}},{status:201});
   }catch(error){
     if(storagePath)await createAdminClient().storage.from("a1-certificates").remove([storagePath]);
     if(error instanceof Error&&(error.message==="FORBIDDEN_CERTIFICATE_WRITE"||error.message==="UNAUTHENTICATED"||error.message==="FORBIDDEN_OFFICE"))return NextResponse.json({error:"Acesso do escritório necessário."},{status:403});
     if(error instanceof z.ZodError)return NextResponse.json({error:"Informe a senha do certificado."},{status:400});
     const output=humanError(error);
-    if(organizationId&&actorUserId){try{await createAdminClient().from("audit_logs").insert({organization_id:organizationId,actor_user_id:actorUserId,action:"certificate_validation_failed",entity:"digital_certificate",entity_id:null,safe_metadata:{code:output.code}});}catch{}}
+    if(organizationId&&actorUserId){try{await createAdminClient().from("audit_logs").insert({organization_id:organizationId,actor_user_id:actorUserId,actor_type:"OFFICE",action:"certificate_validation_failed",entity:"digital_certificate",entity_id:null,safe_metadata:{code:output.code}});}catch{}}
     return NextResponse.json({error:output.error,code:output.code},{status:output.status});
   }
 }

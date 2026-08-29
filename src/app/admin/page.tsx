@@ -4,18 +4,21 @@ import { redirect } from "next/navigation";
 import { requireOfficeSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MetricTile, PageHeader, StatusBadge, formatDateTime, formatTaxId } from "@/components/ui-kit";
+import { getCertificateOperationalState } from "@/lib/operations/queue";
 
 export default async function AdminPage() {
   try { await requireOfficeSession(); } catch { redirect("/app?notice=office"); }
   const db = createAdminClient();
   const month = new Date().toISOString().slice(0, 7);
-  const [companiesResult, issuedResult, certificatesResult, accessResult, activityResult, unknownResult] = await Promise.all([
+  const [companiesResult, issuedResult, certificatesResult, accessResult, activityResult, unknownResult, servicesResult, cancellationsResult] = await Promise.all([
     db.from("organizations").select("id,legal_name,tax_id,municipality_code,state,status,emission_blocked,created_at").order("created_at", { ascending: false }),
     db.from("invoices").select("id", { count: "exact", head: true }).eq("status", "ISSUED").gte("service_date", `${month}-01`),
     db.from("digital_certificates").select("organization_id,status,valid_until").is("replaced_at", null),
     db.from("client_accesses").select("organization_id,enabled"),
     db.from("invoices").select("organization_id,created_at").order("created_at", { ascending: false }).limit(500),
     db.from("invoices").select("id", { count: "exact", head: true }).eq("status", "UNKNOWN"),
+    db.from("service_templates").select("id", { count: "exact", head: true }).in("workflow_status", ["PENDING_REVIEW", "NEEDS_INFO"]),
+    db.from("cancellation_requests").select("id", { count: "exact", head: true }).in("status", ["REQUESTED", "UNDER_REVIEW", "APPROVED", "PROCESSING", "UNKNOWN"]),
   ]);
   const companies = companiesResult.data ?? [];
   const certificates = new Map((certificatesResult.data ?? []).map((item) => [item.organization_id, item]));
@@ -25,6 +28,8 @@ export default async function AdminPage() {
   const active = companies.filter((item) => item.status === "ACTIVE").length;
   const ready = companies.filter((item) => item.status === "ACTIVE" && !item.emission_blocked).length;
   const pending = companies.filter((item) => item.emission_blocked || item.status !== "ACTIVE");
+  const certificateAttention = (certificatesResult.data ?? []).filter((certificate) => getCertificateOperationalState({ status: certificate.status, validUntil: certificate.valid_until }));
+  const inactiveAccesses = (accessResult.data ?? []).filter((access) => !access.enabled).length;
 
   return <div className="page v2-page">
     <PageHeader title="Visão geral" description="Acompanhe a operação fiscal das empresas e mantenha tudo em dia." actions={<>
@@ -60,7 +65,7 @@ export default async function AdminPage() {
     </section>
     <section className="v2-panel v2-pending-panel">
       <div className="v2-panel-heading"><div><h2>Pendências</h2><p>Itens que precisam de atenção antes da emissão.</p></div></div>
-      {pending.length || unknownResult.count ? <div className="v2-pending-list">{unknownResult.count ? <Link href="/admin/notas?status=UNKNOWN"><span className="v2-attention-mark">!</span><span><strong>{unknownResult.count} NFS-e aguardando confirmação</strong><small>Verifique a situação antes de qualquer nova emissão.</small></span><ArrowUpRight size={17} /></Link> : null}{pending.slice(0, 5).map((item) => <Link href={`/admin/empresas/${item.id}`} key={item.id}><span className="v2-attention-mark">!</span><span><strong>{item.legal_name}</strong><small>{item.emission_blocked ? "Onboarding ou liberação de emissão pendente." : `Status atual: ${item.status}.`}</small></span><ArrowUpRight size={17} /></Link>)}</div> : <div className="v2-empty compact"><strong>Nenhuma pendência operacional.</strong></div>}
+      {pending.length || unknownResult.count || certificateAttention.length || servicesResult.count || inactiveAccesses || cancellationsResult.count ? <div className="v2-pending-list">{unknownResult.count ? <Link href="/admin/notas?status=UNKNOWN"><span className="v2-attention-mark">!</span><span><strong>{unknownResult.count} NFS-e aguardando confirmação</strong><small>Verifique a situação antes de qualquer nova emissão.</small></span><ArrowUpRight size={17} /></Link> : null}{certificateAttention.length ? <Link href="/admin/certificados"><span className="v2-attention-mark">!</span><span><strong>{certificateAttention.length} certificado(s) exigem atenção</strong><small>Confira vencimentos e validade dos A1.</small></span><ArrowUpRight size={17} /></Link> : null}{servicesResult.count ? <Link href="/admin/servicos?status=PENDING_REVIEW"><span className="v2-attention-mark">!</span><span><strong>{servicesResult.count} serviço(s) aguardando validação</strong><small>Complete a análise fiscal antes da emissão.</small></span><ArrowUpRight size={17} /></Link> : null}{inactiveAccesses ? <Link href="/admin/pendencias"><span className="v2-attention-mark">!</span><span><strong>{inactiveAccesses} acesso(s) de cliente pendente(s)</strong><small>Revise o acesso principal da empresa.</small></span><ArrowUpRight size={17} /></Link> : null}{cancellationsResult.count ? <Link href="/admin/cancelamentos"><span className="v2-attention-mark">!</span><span><strong>{cancellationsResult.count} cancelamento(s) aguardando análise</strong><small>A transmissão de cancelamento continua bloqueada.</small></span><ArrowUpRight size={17} /></Link> : null}{pending.slice(0, 5).map((item) => <Link href={`/admin/empresas/${item.id}`} key={item.id}><span className="v2-attention-mark">!</span><span><strong>{item.legal_name}</strong><small>{item.emission_blocked ? "Onboarding ou liberação de emissão pendente." : `Status atual: ${item.status}.`}</small></span><ArrowUpRight size={17} /></Link>)}</div> : <div className="v2-empty compact"><strong>Nenhuma pendência operacional.</strong></div>}
     </section>
   </div>;
 }

@@ -29,7 +29,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         updated_at: now,
       }).eq("id", serviceId).eq("organization_id", organizationId);
       if (error) throw error;
-      await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, action: "service_information_requested", entity: "service_template", entity_id: serviceId, safe_metadata: {} });
+      await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, actor_type: "OFFICE", action: "service_information_requested", entity: "service_template", entity_id: serviceId, safe_metadata: {} });
       return NextResponse.json({ ok: true, workflowStatus: "NEEDS_INFO", message: input.message });
     }
     const approvalAllowed = canOfficeApproveService(service.workflow_status, service.created_via);
@@ -39,7 +39,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const approval = buildOfficeServiceApproval(service.workflow_status, service.created_via, now, session.userId);
     const { error } = await db.from("service_templates").update({ ...approval, updated_at: now }).eq("id", serviceId).eq("organization_id", organizationId);
     if (error) throw error;
-    await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, action: "service_reviewed", entity: "service_template", entity_id: serviceId, safe_metadata: {} });
+    await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, actor_type: "OFFICE", action: "service_reviewed", entity: "service_template", entity_id: serviceId, safe_metadata: {} });
     return NextResponse.json({ ok: true, workflowStatus: "REVIEWED", reviewedAt: now, reviewedBy: session.displayName });
   } catch (error) {
     return NextResponse.json({ error: error instanceof z.ZodError ? "Informe uma ação de revisão válida." : "Não foi possível concluir a análise do serviço." }, { status: 422 });

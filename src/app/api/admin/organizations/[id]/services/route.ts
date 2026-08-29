@@ -85,7 +85,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       created_via: "OFFICE",
     }).select("id").single();
     if (error || !data) throw error ?? new Error("SERVICE_CREATE_FAILED");
-    await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, action: "service_template_created", entity: "service_template", entity_id: data.id, safe_metadata: { createdVia: "OFFICE" } });
+    await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, actor_type: "OFFICE", action: "service_template_created", entity: "service_template", entity_id: data.id, safe_metadata: { createdVia: "OFFICE" } });
     return NextResponse.json({ service: data }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof z.ZodError ? "Revise os campos do serviço." : "Não foi possível salvar o serviço." }, { status: 422 });
@@ -105,14 +105,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!input.active) {
         const { error } = await db.from("service_templates").update({ active: false, workflow_status: "INACTIVE", updated_at: now }).eq("id", input.id).eq("organization_id", organizationId);
         if (error) throw error;
-        await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, action: "service_deactivated", entity: "service_template", entity_id: input.id, safe_metadata: {} });
+        await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, actor_type: "OFFICE", action: "service_deactivated", entity: "service_template", entity_id: input.id, safe_metadata: {} });
         return NextResponse.json({ ok: true, workflowStatus: "INACTIVE" });
       }
       const technical = getServiceTechnicalReadiness(existing);
       if (!existing.reviewed_at || !existing.reviewed_by || !technical.ready) return NextResponse.json({ error: "O serviço precisa ser revisado antes de ser reativado.", missing: technical.missing }, { status: 422 });
       const { error } = await db.from("service_templates").update({ active: true, workflow_status: "REVIEWED", updated_at: now }).eq("id", input.id).eq("organization_id", organizationId);
       if (error) throw error;
-      await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, action: "service_activated", entity: "service_template", entity_id: input.id, safe_metadata: {} });
+      await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, actor_type: "OFFICE", action: "service_activated", entity: "service_template", entity_id: input.id, safe_metadata: {} });
       return NextResponse.json({ ok: true, workflowStatus: "REVIEWED" });
     }
     const { db: lookupDb, organization, code } = await getOrganizationAndCode(organizationId, input.nationalServiceCodeId);
@@ -137,8 +137,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updated_at: now,
     }).eq("id", input.id).eq("organization_id", organizationId);
     if (error) throw error;
-    await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, action: "service_template_updated", entity: "service_template", entity_id: input.id, safe_metadata: {} });
-    if (reviewReset) await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, action: "service_review_reset", entity: "service_template", entity_id: input.id, safe_metadata: { reason: "office_fiscal_change" } });
+    await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, actor_type: "OFFICE", action: "service_template_updated", entity: "service_template", entity_id: input.id, safe_metadata: {} });
+    if (reviewReset) await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, actor_type: "OFFICE", action: "service_review_reset", entity: "service_template", entity_id: input.id, safe_metadata: { reason: "office_fiscal_change" } });
     return NextResponse.json({ ok: true, workflowStatus: nextStatus });
   } catch (error) {
     return NextResponse.json({ error: error instanceof z.ZodError ? "Revise os campos do serviço." : "Não foi possível atualizar o serviço." }, { status: 422 });
