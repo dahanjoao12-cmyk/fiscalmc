@@ -20,12 +20,19 @@ export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){
     stage="CERTIFICATE_PROVIDER";
     await provider.getCertificateMaterial({organizationId:id});
     stage="UNSIGNED_XSD";
-    const unsignedXml=await readFile(join(process.cwd(),"fixtures","dps","minimal-valid-unsigned.xml"),"utf8");
-    let validateDpsXml:typeof import("@/lib/nfse/dps/xsd").validateDpsXml;
-    try{({validateDpsXml}=await import("@/lib/nfse/dps/xsd"));}
+    let unsignedXml:string;
+    try{unsignedXml=await readFile(join(process.cwd(),"fixtures","dps","minimal-valid-unsigned.xml"),"utf8");}
+    catch{throw Object.assign(new Error("Fixture DPS indisponível."),{code:"FIXTURE_READ_FAILED"});}
+    console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"FIXTURE_READ"});
+    let validateDpsXml:typeof import("@/lib/nfse/dps/xsd").validateDpsXml,listDpsSchemaFiles:typeof import("@/lib/nfse/dps/xsd").listDpsSchemaFiles;
+    try{({validateDpsXml,listDpsSchemaFiles}=await import("@/lib/nfse/dps/xsd"));}
     catch{throw Object.assign(new Error("Validador XSD indisponível."),{code:"XSD_RUNTIME_UNAVAILABLE"});}
+    const schemaFiles=await listDpsSchemaFiles();
+    console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"SCHEMA_DIRECTORY_READ",schemaFiles});
     const unsigned=await validateDpsXml(unsignedXml);
-    if(!unsigned.valid)throw new Error("UNSIGNED_XSD_FAILED");
+    console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"SCHEMA_PRELOAD",schemaFiles});
+    console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"WASM_VALIDATE",valid:unsigned.valid,errorCount:unsigned.errors.length,errors:unsigned.errors.slice(0,3),schemaFiles});
+    if(!unsigned.valid)throw Object.assign(new Error("A fixture DPS não passou no XSD."),{code:"UNSIGNED_XSD_FAILED"});
     stage="XMLDSIG";
     let signDpsXml:typeof import("@/lib/nfse/dps/signature").signDpsXml,verifyDpsSignature:typeof import("@/lib/nfse/dps/signature").verifyDpsSignature;
     try{({signDpsXml,verifyDpsSignature}=await import("@/lib/nfse/dps/signature"));}
