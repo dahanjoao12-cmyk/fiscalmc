@@ -13,7 +13,7 @@ import { MunicipalParametersProvider } from "@/lib/nfse/municipal-parameters/cli
 export const runtime="nodejs";
 
 /** Read-only operational preflight. It never creates a DPS, reserves a sequence, or transmits. */
-export async function POST(_:Request,{params}:{params:Promise<{id:string}>}){
+export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const session=await requireOfficeSession();
     if(!can(session.role,"certificate:read"))return NextResponse.json({error:"Acesso do escritório necessário."},{status:403});
