@@ -20,6 +20,13 @@ describe("fiscal configuration readiness",()=>{
     expect(readiness.status).toBe("REVIEWED");
     expect(readiness.missing).toEqual([]);
   });
+  it("persiste os códigos técnicos confirmados separados do status de revisão",()=>{
+    const form={taxRegime:"SIMPLES_NACIONAL" as const,simplesNational:"CONFIGURED" as const,mei:"NOT_APPLICABLE" as const,issConfiguration:"CONFIGURED" as const,issWithholding:"CONFIGURED" as const,specialRegime:"CONFIGURED" as const,ibsCbs:"NOT_APPLICABLE" as const};
+    const configuration=normalizeFiscalConfiguration(form,{}, {opSimpNac:"3",regApTribSN:"2",regEspTrib:"6",issWithholdingType:"1"});
+    const readiness=getFiscalConfigurationReadiness({tax_regime:"SIMPLES_NACIONAL",dps_configuration:configuration,reviewed_at:null,reviewed_by:null});
+    expect(readiness.technical).toEqual({opSimpNac:"3",regApTribSN:"2",regEspTrib:"6",issWithholdingType:"1"});
+    expect(readiness.missing).toEqual([]);
+  });
   it("reconhece estrutura inválida sem assumir valores",()=>{
     const readiness=getFiscalConfigurationReadiness({tax_regime:"LUCRO_REAL",dps_configuration:{unknown:true},reviewed_at:null,reviewed_by:null});
     expect(readiness.status).toBe("INVALID");

@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOfficeSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fiscalConfigurationFormSchema,getFiscalConfigurationReadiness,normalizeFiscalConfiguration } from "@/lib/nfse/fiscal-configuration";
+import { fiscalConfigurationFormSchema,fiscalTechnicalConfigurationSchema,getFiscalConfigurationReadiness,normalizeFiscalConfiguration } from "@/lib/nfse/fiscal-configuration";
+
+const fiscalPatchSchema=z.object({form:fiscalConfigurationFormSchema,technical:fiscalTechnicalConfigurationSchema.optional()});
 
 async function organizationExists(organizationId:string){
   const {data,error}=await createAdminClient().from("organizations").select("id").eq("id",organizationId).maybeSingle();
@@ -26,12 +28,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
   try{
     const session=await requireOfficeSession();
     const {id}=await params;
-    const form=fiscalConfigurationFormSchema.parse(await request.json());
+    const raw=await request.json();
+    const input=fiscalPatchSchema.safeParse(raw);
+    const {form,technical}=input.success?input.data:{form:fiscalConfigurationFormSchema.parse(raw),technical:undefined};
     if(!await organizationExists(id))return NextResponse.json({error:"Empresa não encontrada."},{status:404});
     const admin=createAdminClient();
     const {data:previous,error:previousError}=await admin.from("tax_profiles").select("dps_configuration").eq("organization_id",id).maybeSingle();
     if(previousError)throw previousError;
-    const {error}=await admin.from("tax_profiles").upsert({organization_id:id,tax_regime:form.taxRegime,dps_configuration:normalizeFiscalConfiguration(form,previous?.dps_configuration),reviewed_at:null,reviewed_by:null},{onConflict:"organization_id"});
+    const {error}=await admin.from("tax_profiles").upsert({organization_id:id,tax_regime:form.taxRegime,dps_configuration:normalizeFiscalConfiguration(form,previous?.dps_configuration,technical),reviewed_at:null,reviewed_by:null},{onConflict:"organization_id"});
     if(error)throw error;
     await writeAudit(previous?"tax_profile_updated":"tax_profile_created",id,session.userId);
     const {data:profile}=await admin.from("tax_profiles").select("tax_regime,dps_configuration,reviewed_at,reviewed_by").eq("organization_id",id).single();

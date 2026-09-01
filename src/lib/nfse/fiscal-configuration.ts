@@ -13,6 +13,13 @@ export const fiscalConfigurationFormSchema=z.object({
 });
 export type FiscalConfigurationForm=z.infer<typeof fiscalConfigurationFormSchema>;
 export type FiscalConfigurationStatus="DRAFT"|"PENDING_REVIEW"|"REVIEWED"|"INVALID";
+export const fiscalTechnicalConfigurationSchema=z.object({
+  opSimpNac:z.enum(["1","2","3"]),
+  regApTribSN:z.enum(["1","2","3"]).nullable(),
+  regEspTrib:z.enum(["0","1","2","3","4","5","6","9"]),
+  issWithholdingType:z.enum(["1","2","3"])
+});
+export type FiscalTechnicalConfiguration=z.infer<typeof fiscalTechnicalConfigurationSchema>;
 type StoredConfiguration={version:1;form:FiscalConfigurationForm;technical?:unknown};
 
 export const emptyFiscalConfiguration: FiscalConfigurationForm={taxRegime:null,simplesNational:"PENDING_REVIEW",mei:"PENDING_REVIEW",issConfiguration:"PENDING_REVIEW",issWithholding:"PENDING_REVIEW",specialRegime:"PENDING_REVIEW",ibsCbs:"PENDING_REVIEW"};
@@ -26,9 +33,13 @@ export function readFiscalConfiguration(value:unknown):FiscalConfigurationForm{
   return storedConfiguration(value)?.form??emptyFiscalConfiguration;
 }
 
-export function normalizeFiscalConfiguration(form:FiscalConfigurationForm,existing:unknown){
+export function normalizeFiscalConfiguration(form:FiscalConfigurationForm,existing:unknown,technicalInput?:FiscalTechnicalConfiguration){
   const prior=storedConfiguration(existing);
-  const technical=prior?.technical??(isLegacyTechnicalConfiguration(existing)?existing:undefined);
+  const technical=technicalInput?{
+    iss:{withholdingType:technicalInput.issWithholdingType},
+    regime:{simpleNational:technicalInput.opSimpNac,...(technicalInput.regApTribSN?{simpleAssessment:technicalInput.regApTribSN}:{}) ,special:technicalInput.regEspTrib},
+    totalTaxes:{indicator:"0" as const}
+  }:prior?.technical??(isLegacyTechnicalConfiguration(existing)?existing:undefined);
   return {version:1 as const,form,...(technical===undefined?{}:{technical})};
 }
 
@@ -37,9 +48,9 @@ function isLegacyTechnicalConfiguration(value:unknown){
 }
 
 export function getFiscalConfigurationReadiness(profile:{tax_regime:string|null;dps_configuration:unknown;reviewed_at:string|null;reviewed_by:string|null}|null){
-  if(!profile)return {status:"DRAFT" as const,missing:["Regime tributário","Opção pelo Simples","MEI","Configuração de ISS","Retenção de ISS","Regime especial","IBS/CBS"],form:emptyFiscalConfiguration,reviewedAt:null,reviewedBy:null};
+  if(!profile)return {status:"DRAFT" as const,missing:["Regime tributário","Opção pelo Simples","MEI","Configuração de ISS","Retenção de ISS","Regime especial","IBS/CBS"],form:emptyFiscalConfiguration,technical:null,reviewedAt:null,reviewedBy:null};
   const parsed=z.object({version:z.literal(1),form:fiscalConfigurationFormSchema,technical:z.unknown().optional()}).safeParse(profile.dps_configuration);
-  if(!parsed.success)return {status:"INVALID" as const,missing:["Estrutura da configuração fiscal"],form:emptyFiscalConfiguration,reviewedAt:profile.reviewed_at,reviewedBy:profile.reviewed_by};
+  if(!parsed.success)return {status:"INVALID" as const,missing:["Estrutura da configuração fiscal"],form:emptyFiscalConfiguration,technical:null,reviewedAt:profile.reviewed_at,reviewedBy:profile.reviewed_by};
   const form=parsed.data.form;
   const missing:string[]=[];
   if(!profile.tax_regime||form.taxRegime!==profile.tax_regime)missing.push("Regime tributário");
@@ -50,5 +61,13 @@ export function getFiscalConfigurationReadiness(profile:{tax_regime:string|null;
   if(form.specialRegime==="PENDING_REVIEW")missing.push("Regime especial");
   if(form.ibsCbs==="PENDING_REVIEW")missing.push("IBS/CBS");
   const status: FiscalConfigurationStatus=missing.length?"PENDING_REVIEW":profile.reviewed_at?"REVIEWED":"PENDING_REVIEW";
-  return {status,missing,form,reviewedAt:profile.reviewed_at,reviewedBy:profile.reviewed_by};
+  const technical=parsed.data.technical;
+  const technicalRecord=technical as {regime?:{simpleNational?:unknown;simpleAssessment?:unknown;special?:unknown};iss?:{withholdingType?:unknown}}|undefined;
+  const technicalForm=fiscalTechnicalConfigurationSchema.safeParse({
+    opSimpNac:technicalRecord?.regime?.simpleNational,
+    regApTribSN:technicalRecord?.regime?.simpleAssessment??null,
+    regEspTrib:technicalRecord?.regime?.special,
+    issWithholdingType:technicalRecord?.iss?.withholdingType
+  });
+  return {status,missing,form,technical:technicalForm.success?technicalForm.data:null,reviewedAt:profile.reviewed_at,reviewedBy:profile.reviewed_by};
 }
