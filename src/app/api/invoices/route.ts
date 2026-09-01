@@ -5,7 +5,7 @@ import { getNFSeProvider } from "@/lib/nfse/issuance/provider";
 import { parseMoneyToCents } from "@/lib/validation/money";
 import { assertRateLimit } from "@/lib/security/rate-limit";
 import { logEvent } from "@/lib/observability/logger";
-import { requireSessionOrganization } from "@/lib/auth/session";
+import { requireIssuanceContext } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveFiscalConfiguration } from "@/lib/nfse/fiscal-rule-resolver";
 import { SafeFiscalError } from "@/lib/nfse/errors";
@@ -22,7 +22,7 @@ import { reconcileUnknownInvoice } from "@/lib/nfse/reconciliation/service";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 
-const schema=z.object({serviceTemplateId:z.uuid(),customerId:z.uuid(),amount:z.union([z.string(),z.number()]),serviceDate:z.iso.date(),description:z.string().trim().min(3).max(1000),scenario:z.enum(["success","rejection","timeout"]).optional()});
+const schema=z.object({organizationId:z.uuid().optional(),serviceTemplateId:z.uuid(),customerId:z.uuid(),amount:z.union([z.string(),z.number()]),serviceDate:z.iso.date(),description:z.string().trim().min(3).max(1000),scenario:z.enum(["success","rejection","timeout"]).optional()});
 const idempotencySchema=z.uuid();
 type Input=z.infer<typeof schema>;
 
@@ -46,7 +46,7 @@ export async function POST(request:Request){
       return NextResponse.json({status:result.status,invoiceId:result.status==="ISSUED"?result.nfseNumber:undefined,safeMessage:result.status==="UNKNOWN"?UNKNOWN_CLIENT_MESSAGE:result.status==="REJECTED"?result.safeMessage:"Nota emitida com sucesso."},{status:result.status==="UNKNOWN"?202:result.status==="REJECTED"?422:201,headers:{"X-Request-ID":requestId}});
     }
 
-    const session=await requireSessionOrganization();
+    const session=await requireIssuanceContext(requested.organizationId);
     const admin=createAdminClient();
     let{data:existing}=await admin.from("invoices").select("id,status,access_key,nfse_number,safe_status_message,customer_id,service_template_id,amount_cents,service_date,description,dps_series,dps_number,dps_identifier").eq("organization_id",session.organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();
     if(existing&&existing.status==="UNKNOWN"){
@@ -78,11 +78,13 @@ export async function POST(request:Request){
     if(!invoice){const reservation=await admin.rpc("reserve_dps_number",{target_org:session.organizationId,target_env:"PRODUCTION_RESTRICTED",target_series:"00001"});if(reservation.error||reservation.data===null)throw new Error("DPS_RESERVATION_FAILED");dpsNumber=reservation.data;}
     const document=buildFiscalDocument({organization:{id:organization.id,taxId:organization.tax_id,municipalRegistration:organization.municipal_registration??"",municipalityCode:organization.municipality_code},customer:{taxId:customer.tax_id,legalName:customer.legal_name},service:{nationalTaxCode:service.national_tax_code,municipalServiceCode:fiscal.municipalServiceCode},taxConfiguration:{regime:profile.tax_regime,taxationType:"MUNICIPAL",iss:{rateBasisPoints:fiscal.iss.rateBasisPoints,withheld:fiscal.iss.withholdingType!=="1",source:fiscal.iss.source},ibsCbs:{customerFieldsEnabled:false}},amountCents:parseMoneyToCents(effective.amount),serviceDate:effective.serviceDate,description:effective.description,dpsNumber:BigInt(dpsNumber),dpsSeries:existing?.dps_series??"00001"});
     if(!invoice){
-      const inserted=await admin.from("invoices").insert({organization_id:session.organizationId,customer_id:customer.id,service_template_id:service.id,amount_cents:document.amountCents,service_date:effective.serviceDate,description:effective.description,status:"READY",idempotency_key:idempotencyKey,dps_series:"00001",dps_number:dpsNumber,dps_identifier:document.dps.identifier,environment:"PRODUCTION_RESTRICTED",created_by:session.userId}).select("id,status,dps_identifier").single();
+      const inserted=await admin.from("invoices").insert({organization_id:session.organizationId,customer_id:customer.id,service_template_id:service.id,amount_cents:document.amountCents,service_date:effective.serviceDate,description:effective.description,status:"READY",idempotency_key:idempotencyKey,dps_series:"00001",dps_number:dpsNumber,dps_identifier:document.dps.identifier,environment:"PRODUCTION_RESTRICTED",created_by:session.actorUserId}).select("id,status,dps_identifier").single();
       if(inserted.error||!inserted.data){const replay=await admin.from("invoices").select("id,status,access_key,nfse_number,safe_status_message").eq("organization_id",session.organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();if(replay.data)return responseForStored(replay.data,requestId);throw new Error("INVOICE_PERSIST_FAILED");}
       invoice=inserted.data as typeof existing;
     }
     if(!invoice)throw new Error("INVOICE_PERSIST_FAILED");
+    const audit=await admin.from("audit_logs").insert({organization_id:session.organizationId,actor_user_id:session.actorUserId,actor_type:session.actorType,action:"invoice_requested",entity:"invoice",entity_id:invoice.id,request_id:requestId,safe_metadata:{}});
+    if(audit.error)throw new Error("INVOICE_AUDIT_FAILED");
     const attemptRequestId=crypto.randomUUID();
     logEvent("info","INVOICE_REQUESTED",{requestId,organizationId:session.organizationId,idempotencyKey});
     const submission=await submitInvoiceSafely({gateway:createSupabaseInvoiceSubmissionGateway(),invoiceId:invoice.id,organizationId:session.organizationId,requestId:attemptRequestId,dpsIdentifier:document.dps.identifier,execute:async()=>{

@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { resolveIssuanceContextFromMemberships, type IssuanceContext } from "@/lib/auth/issuance-context";
 
 export type SessionOrganization={organizationId:string;role:"SUPER_ADMIN"|"OFFICE_STAFF"|"CLIENT_USER";userId:string};
 type AuthenticatedUser={id:string;email:string|null;displayName:string};
@@ -40,6 +41,19 @@ export async function requireSessionOrganization():Promise<SessionOrganization>{
   if(error||!data?.length) throw new Error("FORBIDDEN_ORGANIZATION");
   if(data.length>1) throw new Error("ORGANIZATION_CONTEXT_REQUIRED");
   return {organizationId:data[0].organization_id,role:data[0].role,userId:user.id};
+}
+
+export async function requireIssuanceContext(requestedOrganizationId?:string):Promise<IssuanceContext>{
+  const {client,user}=await getAuthenticatedClient();
+  if(!client)throw new Error("AUTH_CONFIGURATION_REQUIRED");
+  if(!user)throw new Error("UNAUTHENTICATED");
+  const {data,error}=await getActiveMemberships(user.id);
+  if(error||!data?.length)throw new Error("FORBIDDEN_ORGANIZATION");
+  return resolveIssuanceContextFromMemberships({
+    actorUserId:user.id,
+    requestedOrganizationId,
+    memberships:data.map((item)=>({organizationId:item.organization_id,role:item.role})),
+  });
 }
 
 /** Server Components redirect unauthenticated visitors; API routes retain HTTP error responses. */

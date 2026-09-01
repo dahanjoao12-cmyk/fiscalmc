@@ -7,11 +7,11 @@ import { getInvoicePresentation } from "@/lib/invoices/presentation";
 
 export type IssueCustomer = { id: string; legalName: string; taxId?: string | null };
 export type IssueService = { id: string; name: string; defaultDescription?: string | null };
-type Props = { customers: IssueCustomer[]; services: IssueService[]; mock?: boolean };
+type Props = { customers: IssueCustomer[]; services: IssueService[]; mock?: boolean; issuanceOrganizationId?: string };
 type Result = { status: "ISSUED" | "REJECTED" | "UNKNOWN"; invoiceId?: string; safeMessage: string };
 const steps = ["Tomador", "Serviço", "Valores", "Revisão", "Emitir"];
 
-export function IssueForm({ customers, services, mock = false }: Props) {
+export function IssueForm({ customers, services, mock = false, issuanceOrganizationId }: Props) {
   const [selectedCustomerId, setCustomerId] = useState(customers[0]?.id ?? "");
   const [selectedServiceTemplateId, setServiceId] = useState(services[0]?.id ?? "");
   const [amount, setAmount] = useState("");
@@ -32,7 +32,7 @@ export function IssueForm({ customers, services, mock = false }: Props) {
     if (!preview) return;
     setSubmitting(true);
     try {
-      const response = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ customerId: selectedCustomerId, serviceTemplateId: selectedServiceTemplateId, amount: amount.replace(/\./g, "").replace(",", "."), serviceDate: date, description, ...(mock ? { scenario: "success" } : {}) }) });
+      const response = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ ...(issuanceOrganizationId ? { organizationId: issuanceOrganizationId } : {}), customerId: selectedCustomerId, serviceTemplateId: selectedServiceTemplateId, amount: amount.replace(/\./g, "").replace(",", "."), serviceDate: date, description, ...(mock ? { scenario: "success" } : {}) }) });
       const payload = await response.json() as Result & { error?: string };
       if (payload.status === "REJECTED" || payload.status === "UNKNOWN" || payload.status === "ISSUED") {
         setResult(payload);
