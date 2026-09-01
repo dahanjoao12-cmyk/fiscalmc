@@ -5,6 +5,7 @@ import { ServiceManager, type ManagedService } from "@/components/service-manage
 import { FiscalConfigurationForm } from "@/components/fiscal-configuration-form";
 import { CertificateManager } from "@/components/certificate-manager";
 import { ClientAccessManager } from "@/components/client-access-manager";
+import { MunicipalRegistrationForm } from "@/components/municipal-registration-form";
 import { IssueForm, type IssueCustomer, type IssueService } from "@/components/issue-form";
 import { StatusBadge, formatDate, formatTaxId } from "@/components/ui-kit";
 import { requireOfficeSession } from "@/lib/auth/session";
@@ -72,7 +73,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
     <nav className="tabs v2-tabs" aria-label="Seções da empresa">{tabs.map(([key, label]) => <Link className={tab === key ? "active" : ""} href={`/admin/empresas/${id}?tab=${key}`} key={key}>{label}</Link>)}</nav>
 
     {tab === "overview" ? <div className="v2-company-overview">
-      <section className="v2-panel v2-readiness-panel">
+      <div><section className="v2-panel v2-readiness-panel">
         <div className="v2-panel-heading"><div><h2>Prontidão para emissão</h2><p>Requisitos administrativos e fiscais desta empresa.</p></div><StatusBadge tone={organizationReadiness.overallReady ? "success" : "warning"}>{organizationReadiness.overallReady ? "Completa" : `${pendingItems.length} pendência(s)`}</StatusBadge></div>
         <div className="v2-readiness-list">{organizationReadiness.items.map((item) => <div key={item.key} className={item.ready ? "is-ready" : "is-pending"}>
           <span className="v2-readiness-icon">{item.ready ? <Check size={18} /> : <AlertTriangle size={17} />}</span>
@@ -80,7 +81,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
           <StatusBadge tone={item.ready ? item.warning ? "warning" : "success" : "warning"}>{item.ready ? item.warning ? "Atenção" : "Concluído" : "Pendente"}</StatusBadge>
           <Link href={`/admin/empresas/${id}?tab=${readinessTabs[item.key]}`}>{item.ready ? "Revisar" : "Resolver"}<ArrowRight size={15} /></Link>
         </div>)}</div>
-      </section>
+      </section><MunicipalRegistrationForm organizationId={company.id} initialValue={company.municipal_registration} /></div>
       <aside className="v2-company-aside">
         <section className="v2-panel"><div className="v2-panel-heading"><div><h2>Resumo da empresa</h2></div></div><dl className="v2-definition-list">
           <div><dt>Regime</dt><dd>{taxProfileResult.data?.tax_regime?.replaceAll("_", " ") ?? "Pendente"}</dd></div>
