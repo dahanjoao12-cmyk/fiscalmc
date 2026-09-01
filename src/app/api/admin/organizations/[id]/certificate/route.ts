@@ -40,6 +40,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
   let storagePath:string|undefined;
   let organizationId:string|undefined;
   let actorUserId:string|undefined;
+  let persistenceStage:"STORAGE"|"RPC"|undefined;
   try{
     const session=await requireCertificateWrite();
     actorUserId=session.userId;
@@ -68,14 +69,22 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const storageId=crypto.randomUUID();
     storagePath=`organizations/${organizationId}/certificates/${storageId}.p12`;
     const{error:uploadError}=await db.storage.from("a1-certificates").upload(storagePath,buffer,{contentType:"application/x-pkcs12",upsert:false});
-    if(uploadError)throw new CertificateRequestError("CERTIFICATE_STORAGE_FAILED","Não foi possível armazenar o certificado.");
+    if(uploadError){
+      persistenceStage="STORAGE";
+      console.error("CERTIFICATE_PERSISTENCE_FAILURE",{stage:persistenceStage,providerCode:uploadError.name??"UNKNOWN"});
+      throw new CertificateRequestError("CERTIFICATE_STORAGE_FAILED","Não foi possível armazenar o certificado.");
+    }
+    persistenceStage="RPC";
     const{data:certificateId,error:registrationError}=await db.rpc("register_organization_certificate",{
       p_organization_id:organizationId,p_storage_path:storagePath,p_encrypted_password:encryptedPassword,
       p_serial:validation.metadata.serial,p_subject:validation.metadata.subject,p_issuer:validation.metadata.issuer,
       p_valid_from:validation.metadata.validFrom,p_valid_until:validation.metadata.validUntil,p_status:status,
       p_owner_tax_id:validation.metadata.ownerTaxId,p_fingerprint_sha256:validation.metadata.fingerprintSha256,
     });
-    if(registrationError||!certificateId)throw new CertificateRequestError("CERTIFICATE_STORAGE_FAILED","Não foi possível armazenar o certificado.");
+    if(registrationError||!certificateId){
+      console.error("CERTIFICATE_PERSISTENCE_FAILURE",{stage:persistenceStage,providerCode:registrationError?.code??"EMPTY_RESULT"});
+      throw new CertificateRequestError("CERTIFICATE_STORAGE_FAILED","Não foi possível armazenar o certificado.");
+    }
     storagePath=undefined;
     await db.from("audit_logs").insert({organization_id:organizationId,actor_user_id:session.userId,actor_type:"OFFICE",action:current?"certificate_replaced":"certificate_added",entity:"digital_certificate",entity_id:certificateId,safe_metadata:{status}});
     return NextResponse.json({certificate:{id:certificateId,subject:validation.metadata.subject,issuer:validation.metadata.issuer,serial:validation.metadata.serial,owner_tax_id:validation.metadata.ownerTaxId,valid_from:validation.metadata.validFrom,valid_until:validation.metadata.validUntil,status}},{status:201});
@@ -84,7 +93,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     if(error instanceof Error&&(error.message==="FORBIDDEN_CERTIFICATE_WRITE"||error.message==="UNAUTHENTICATED"||error.message==="FORBIDDEN_OFFICE"))return NextResponse.json({error:"Acesso do escritório necessário."},{status:403});
     if(error instanceof z.ZodError)return NextResponse.json({error:"Informe a senha do certificado."},{status:400});
     const output=humanError(error);
-    if(organizationId&&actorUserId){try{await createAdminClient().from("audit_logs").insert({organization_id:organizationId,actor_user_id:actorUserId,actor_type:"OFFICE",action:"certificate_validation_failed",entity:"digital_certificate",entity_id:null,safe_metadata:{code:output.code}});}catch{}}
+    if(organizationId&&actorUserId){try{await createAdminClient().from("audit_logs").insert({organization_id:organizationId,actor_user_id:actorUserId,actor_type:"OFFICE",action:"certificate_validation_failed",entity:"digital_certificate",entity_id:null,safe_metadata:{code:output.code,...(persistenceStage?{stage:persistenceStage}:{})}});}catch{}}
     return NextResponse.json({error:output.error,code:output.code},{status:output.status});
   }
 }
