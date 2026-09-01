@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { describe,expect,it } from "vitest";
 import { buildDpsIdentifier } from "@/lib/nfse/dps/identifier";
 import { decodeDpsFromSefin,encodeDpsForSefin } from "@/lib/nfse/dps/encoding";
-import { validateDpsXml } from "@/lib/nfse/dps/xsd";
+import { validateDpsXml,validateXsdRuntimeProbe } from "@/lib/nfse/dps/xsd";
 import { assertDpsReadiness } from "@/lib/nfse/dps/readiness";
 
 const fixturePath=new URL("../../fixtures/dps/minimal-valid-unsigned.xml",import.meta.url);
@@ -12,6 +12,7 @@ async function fixture(){return readFile(fixturePath,"utf8");}
 describe("DPS v1.01",()=>{
   it("forma o identificador conforme TSIdDPS",()=>expect(buildDpsIdentifier({municipalityCode:"3304557",taxId:"12345678000195",series:"00001",number:1n})).toBe("DPS330455711234567800019500001000000000000001"));
   it("valida a fixture sanitizada contra o XSD oficial",async()=>expect((await validateDpsXml(await fixture())).valid).toBe(true));
+  it("inicializa o runtime WASM com um XSD mínimo",async()=>await expect(validateXsdRuntimeProbe()).resolves.toBeUndefined());
   it("resolve os includes e imports oficiais da DPS",async()=>expect((await validateDpsXml(await fixture())).errors).toEqual([]));
   it("rejeita namespace incorreto",async()=>expect((await validateDpsXml((await fixture()).replace("http://www.sped.fazenda.gov.br/nfse","urn:invalid"))).valid).toBe(false));
   it("rejeita elemento obrigatório ausente",async()=>expect((await validateDpsXml((await fixture()).replace("<cLocEmi>3304557</cLocEmi>",""))).valid).toBe(false));

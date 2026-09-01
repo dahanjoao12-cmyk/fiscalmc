@@ -24,11 +24,13 @@ export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){
     try{unsignedXml=await readFile(join(process.cwd(),"fixtures","dps","minimal-valid-unsigned.xml"),"utf8");}
     catch{throw Object.assign(new Error("Fixture DPS indisponível."),{code:"FIXTURE_READ_FAILED"});}
     console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"FIXTURE_READ"});
-    let validateDpsXml:typeof import("@/lib/nfse/dps/xsd").validateDpsXml,listDpsSchemaFiles:typeof import("@/lib/nfse/dps/xsd").listDpsSchemaFiles;
-    try{({validateDpsXml,listDpsSchemaFiles}=await import("@/lib/nfse/dps/xsd"));}
+    let validateDpsXml:typeof import("@/lib/nfse/dps/xsd").validateDpsXml,listDpsSchemaFiles:typeof import("@/lib/nfse/dps/xsd").listDpsSchemaFiles,validateXsdRuntimeProbe:typeof import("@/lib/nfse/dps/xsd").validateXsdRuntimeProbe;
+    try{({validateDpsXml,listDpsSchemaFiles,validateXsdRuntimeProbe}=await import("@/lib/nfse/dps/xsd"));}
     catch{throw Object.assign(new Error("Validador XSD indisponível."),{code:"XSD_RUNTIME_UNAVAILABLE"});}
     const schemaFiles=await listDpsSchemaFiles();
     console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"SCHEMA_DIRECTORY_READ",schemaFiles});
+    await validateXsdRuntimeProbe();
+    console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"WASM_MINIMAL_VALIDATE",valid:true});
     const unsigned=await validateDpsXml(unsignedXml);
     console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"SCHEMA_PRELOAD",schemaFiles});
     console.info("CERTIFICATE_PREFLIGHT_UNSIGNED_XSD",{substage:"WASM_VALIDATE",valid:unsigned.valid,errorCount:unsigned.errors.length,errors:unsigned.errors.slice(0,3),schemaFiles});
@@ -52,7 +54,8 @@ export async function GET(_:Request,{params}:{params:Promise<{id:string}>}){
   }catch(error){
     const upstream=error instanceof Error&&"code" in error&&typeof error.code==="string"?error.code:"PREFLIGHT_FAILED";
     const code=`${stage}:${upstream}`;
-    console.error("CERTIFICATE_PREFLIGHT_FAILURE",{stage,code:upstream});
+    const diagnostic=error instanceof Error&&"diagnostic" in error&&typeof error.diagnostic==="object"&&error.diagnostic?error.diagnostic:undefined;
+    console.error("CERTIFICATE_PREFLIGHT_FAILURE",{stage,code:upstream,diagnostic});
     return NextResponse.json({error:"O preflight técnico não foi concluído.",code},{status:422});
   }
 }
