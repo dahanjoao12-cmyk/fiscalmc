@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  serverExternalPackages: ["xmllint-wasm"],
   outputFileTracingIncludes: {
     "/api/admin/organizations/\\[id\\]/certificate/preflight": ["./fixtures/dps/minimal-valid-unsigned.xml","./schemas/nfse/production-restricted/**/*.xsd","./node_modules/xmllint-wasm/**/*","./node_modules/.pnpm/xmllint-wasm*/node_modules/xmllint-wasm/**/*"]
   },
