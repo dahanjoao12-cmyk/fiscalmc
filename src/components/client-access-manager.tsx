@@ -7,7 +7,7 @@ type AccessResult = { access: Access | null; readiness: { ready: boolean; status
 
 export function ClientAccessManager({ organizationId, organizationTaxId, initial, canWrite }: { organizationId: string; organizationTaxId: string; initial: AccessResult; canWrite: boolean }) {
   const [result, setResult] = useState(initial);
-  const [mode, setMode] = useState<"CREATE" | "RESET" | null>(initial.access ? null : "CREATE");
+  const [mode, setMode] = useState<"CREATE" | "RESET" | "REPAIR" | null>(initial.access ? null : "CREATE");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -32,7 +32,9 @@ export function ClientAccessManager({ organizationId, organizationTaxId, initial
     if (password.length < 8) { setError("A senha deve ter pelo menos 8 caracteres."); return; }
     if (password !== confirmPassword) { setError("As senhas não coincidem."); return; }
     const created = mode === "CREATE";
-    if (await request(created ? "POST" : "PATCH", created ? { password, confirmPassword } : { action: "RESET_PASSWORD", password, confirmPassword })) setNotice(created ? "Acesso criado com sucesso." : "Senha redefinida com sucesso.");
+    const repaired = mode === "REPAIR";
+    const body: Record<string, string> = created ? { password, confirmPassword } : { action: repaired ? "REPAIR" : "RESET_PASSWORD", password, confirmPassword };
+    if (await request(created ? "POST" : "PATCH", body)) setNotice(created ? "Acesso criado com sucesso." : repaired ? "Acesso do cliente reparado com sucesso." : "Senha redefinida com sucesso.");
   }
 
   async function changeState(action: "BLOCK" | "REACTIVATE") {
@@ -53,12 +55,13 @@ export function ClientAccessManager({ organizationId, organizationTaxId, initial
     {error && <p className="alert error" role="alert">{error}</p>}
     {!canWrite && <p className="client-access-note">Seu perfil pode consultar o status, mas somente superadministradores podem alterar o acesso.</p>}
     {canWrite && mode && <div className="client-access-password-form">
-      <div><strong>{mode === "CREATE" ? "Criar acesso principal" : "Redefinir senha"}</strong><p>{mode === "CREATE" ? `O acesso será criado para o CNPJ ${formatCnpj(organizationTaxId)}.` : "A senha atual não será exibida nem recuperada."}</p></div>
+      <div><strong>{mode === "CREATE" ? "Criar acesso principal" : mode === "REPAIR" ? "Reparar acesso do cliente" : "Redefinir senha"}</strong><p>{mode === "CREATE" ? `O acesso será criado para o CNPJ ${formatCnpj(organizationTaxId)}.` : mode === "REPAIR" ? "Uma nova identidade CLIENT_USER será criada. O acesso administrativo atual será preservado." : "A senha atual não será exibida nem recuperada."}</p></div>
       <label>Nova senha<input className="input" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} /></label>
       <label>Confirmar senha<input className="input" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} /></label>
-      <div className="client-access-form-actions">{access && <button className="button ghost" type="button" onClick={() => { setMode(null); setError(null); }}>Cancelar</button>}<button className="button primary" type="button" onClick={submitPassword} disabled={saving}><UserRoundPlus size={18}/>{saving ? "Salvando…" : mode === "CREATE" ? "Criar acesso" : "Salvar nova senha"}</button></div>
+      <div className="client-access-form-actions">{access && <button className="button ghost" type="button" onClick={() => { setMode(null); setError(null); }}>Cancelar</button>}<button className="button primary" type="button" onClick={submitPassword} disabled={saving}><UserRoundPlus size={18}/>{saving ? "Salvando…" : mode === "CREATE" ? "Criar acesso" : mode === "REPAIR" ? "Criar acesso CLIENT_USER" : "Salvar nova senha"}</button></div>
     </div>}
     {canWrite && access && !mode && <div className="client-access-actions">
+      {access.status === "INVALID" ? <button className="button primary" type="button" onClick={() => { setMode("REPAIR"); setError(null); setNotice(null); }}><UserRoundPlus size={17}/>Reparar acesso do cliente</button> : null}
       {access.status === "ACTIVE" ? <button className="button secondary" type="button" onClick={() => changeState("BLOCK")} disabled={saving}><LockKeyhole size={17}/>Bloquear acesso</button> : <button className="button primary" type="button" onClick={() => changeState("REACTIVATE")} disabled={saving}><RotateCcw size={17}/>Reativar acesso</button>}
       <button className="button ghost" type="button" onClick={() => { setMode("RESET"); setError(null); setNotice(null); }}><KeyRound size={17}/>Redefinir senha</button>
     </div>}

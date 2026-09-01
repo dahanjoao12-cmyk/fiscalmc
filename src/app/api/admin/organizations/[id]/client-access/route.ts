@@ -11,6 +11,7 @@ const organizationIdSchema = z.string().uuid();
 const patchSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("BLOCK") }),
   z.object({ action: z.literal("REACTIVATE") }),
+  z.object({ action: z.literal("REPAIR"), password: z.string(), confirmPassword: z.string() }),
   z.object({ action: z.literal("RESET_PASSWORD"), password: z.string(), confirmPassword: z.string() }),
 ]);
 
@@ -68,6 +69,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       ? await service.block({ organizationId: id, actorUserId: session.userId })
       : input.action === "REACTIVATE"
         ? await service.reactivate({ organizationId: id, actorUserId: session.userId })
+        : input.action === "REPAIR"
+          ? await service.repairInvalid({ organizationId: id, actorUserId: session.userId, password: passwordConfirmationSchema.parse(input).password })
         : await service.resetPassword({ organizationId: id, actorUserId: session.userId, password: passwordConfirmationSchema.parse(input).password });
     return NextResponse.json(result);
   } catch (error) {

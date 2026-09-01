@@ -32,6 +32,7 @@ export interface ClientAccessGateway {
   getAccess(organizationId: string): Promise<AccessRecord | null>;
   createAuthUser(input: { email: string; password: string; fullName: string; organizationId: string }): Promise<string>;
   registerAccess(input: { organization: OrganizationRecord; userId: string; technicalEmail: string; actorUserId: string }): Promise<void>;
+  repairInvalidAccess?(input: { organization: OrganizationRecord; userId: string; technicalEmail: string; actorUserId: string }): Promise<void>;
   cleanupFailedRegistration(organizationId: string, userId: string): Promise<void>;
   updateAuthUser(userId: string, attributes: { password?: string; ban_duration?: string }): Promise<void>;
   setAccessState(input: { organizationId: string; userId: string; enabled: boolean; actorUserId: string }): Promise<void>;
@@ -73,6 +74,26 @@ export class ClientAccessService {
       if (userId) await this.gateway.cleanupFailedRegistration(organization.id, userId);
       if (error instanceof ClientAccessError) throw error;
       throw new ClientAccessError(userId ? "CLIENT_ACCESS_PERSIST_FAILED" : "AUTH_USER_CREATION_FAILED");
+    }
+    return this.getSummary(input.organizationId);
+  }
+
+  async repairInvalid(input: { organizationId: string; password: string; actorUserId: string }) {
+    const parsedPassword = passwordSchema.safeParse(input.password);
+    if (!parsedPassword.success) throw new ClientAccessError("PASSWORD_INVALID");
+    const organization = await this.gateway.getOrganization(input.organizationId);
+    if (!organization) throw new ClientAccessError("ORGANIZATION_NOT_FOUND");
+    const existing = await this.gateway.getAccess(input.organizationId);
+    if (!existing || existing.membership?.role === "CLIENT_USER") throw new ClientAccessError("CLIENT_ACCESS_NOT_FOUND");
+    const technicalEmail = buildTechnicalClientEmail(organization.taxId);
+    let userId: string | null = null;
+    try {
+      userId = await this.gateway.createAuthUser({ email: technicalEmail, password: parsedPassword.data, fullName: organization.legalName, organizationId: organization.id });
+      if (!this.gateway.repairInvalidAccess) throw new ClientAccessError("CLIENT_ACCESS_PERSIST_FAILED");
+      await this.gateway.repairInvalidAccess({ organization, userId, technicalEmail, actorUserId: input.actorUserId });
+    } catch (error) {
+      if (userId) await this.gateway.cleanupFailedRegistration(input.organizationId, userId);
+      throw error instanceof ClientAccessError ? error : new ClientAccessError(userId ? "CLIENT_ACCESS_PERSIST_FAILED" : "AUTH_USER_CREATION_FAILED");
     }
     return this.getSummary(input.organizationId);
   }
@@ -151,6 +172,10 @@ export function createSupabaseClientAccessGateway(admin: SupabaseClient = create
     },
     async registerAccess(input) {
       const { error } = await admin.rpc("register_client_access", { p_organization_id: input.organization.id, p_user_id: input.userId, p_technical_email: input.technicalEmail, p_full_name: input.organization.legalName, p_actor_user_id: input.actorUserId });
+      if (error) throw error;
+    },
+    async repairInvalidAccess(input) {
+      const { error } = await admin.rpc("repair_invalid_client_access", { p_organization_id: input.organization.id, p_user_id: input.userId, p_technical_email: input.technicalEmail, p_full_name: input.organization.legalName, p_actor_user_id: input.actorUserId });
       if (error) throw error;
     },
     async cleanupFailedRegistration(organizationId, userId) {
