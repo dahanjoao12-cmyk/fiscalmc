@@ -3,9 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
-  // Native XSD validation must be loaded by Node at runtime, not bundled by
-  // Turbopack into the Route Handler output.
-  serverExternalPackages: ["libxmljs2"],
+  outputFileTracingIncludes: {
+    "/api/admin/organizations/\\[id\\]/certificate/preflight": ["./schemas/nfse/production-restricted/**/*.xsd","./node_modules/xmllint-wasm/**/*","./node_modules/.pnpm/xmllint-wasm*/node_modules/xmllint-wasm/**/*"]
+  },
   async headers() {
     return [{
       source: "/(.*)",
