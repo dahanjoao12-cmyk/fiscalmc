@@ -9,7 +9,7 @@ import { decodeDpsFromSefin } from "../src/lib/nfse/dps/encoding";
 import { assertDpsReadiness } from "../src/lib/nfse/dps/readiness";
 
 const document=buildFiscalDocument({organization:{id:"fixture",taxId:input.issuer.taxId,municipalRegistration:input.issuer.municipalRegistration,municipalityCode:"3304557"},customer:{taxId:input.customer.taxId,legalName:input.customer.name},service:{nationalTaxCode:"070201"},taxConfiguration:{regime:"SIMPLES_NACIONAL",taxationType:"MUNICIPAL",iss:{withheld:false,source:"OFFICE_PARAMETER"},ibsCbs:{customerFieldsEnabled:false}},amountCents:10000,serviceDate:"2026-08-25",description:"Serviço sanitizado de teste",dpsNumber:1n,dpsSeries:"00001"});
-const fiscal={...input.fiscal,regime:{simpleNational:"1" as const,special:"0" as const},iss:{taxation:"1" as const,withholding:"1" as const,rateBasisPoints:500},totalTaxes:{indicator:"0" as const}};
+const fiscal={...input.fiscal,regime:{simpleNational:"1" as const,special:"0" as const},iss:{taxation:"1" as const,withholding:"1" as const,rateSource:"EMITTER_PROVIDED" as const,rateBasisPoints:500},totalTaxes:{indicator:"0" as const}};
 await assertDpsReadiness({organization:{legalName:input.issuer.name,taxId:input.issuer.taxId,municipalRegistration:input.issuer.municipalRegistration,municipalityCode:"3304557",address:{street:"Rua Sanitizada",number:"1",neighborhood:"Centro",postalCode:"20000000",municipalityCode:"3304557",stateOrProvince:"RJ"}},service:{nationalTaxCode:"070201",municipalTaxCode:"001",locationMunicipalityCode:"3304557"},customer:{name:input.customer.name,taxId:input.customer.taxId},fiscal});
 const model=mapToDpsModel(document,{...input,fiscal,dpsMunicipalTaxCode:"001"});
 const unsignedXml=buildDpsXml(model);

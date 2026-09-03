@@ -54,7 +54,9 @@ export async function assertDpsReadiness(input: {
   if (customer.address) assertDomesticAddress(customer.address, "tomador");
 
   if (!fiscal.regime || !fiscal.iss || !fiscal.totalTaxes || fiscal.ibsCbsRequired) incomplete("fiscal");
-  if (fiscal.iss.taxation === "1" && fiscal.iss.rateBasisPoints === undefined) incomplete("fiscal");
+  if (!(["PARAMETRIZED_BY_NATIONAL", "EMITTER_PROVIDED"] as const).includes(fiscal.iss.rateSource)) incomplete("fiscal");
+  if (fiscal.iss.rateSource === "EMITTER_PROVIDED" && fiscal.iss.rateBasisPoints === undefined) incomplete("fiscal");
+  if (fiscal.iss.rateSource === "PARAMETRIZED_BY_NATIONAL" && fiscal.iss.rateBasisPoints !== undefined) incomplete("fiscal");
 
   if (input.verifyCertificate !== false) {
     try{await (input.certificateProvider??new LocalCertificateProvider()).getCertificateMaterial({organizationId:input.organizationId});}

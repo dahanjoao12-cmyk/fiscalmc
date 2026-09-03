@@ -50,7 +50,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   try {
     await requireOfficeSession();
     const { id } = await params;
-    const { data, error } = await createAdminClient().from("service_templates").select("id,name,default_description,active,workflow_status,created_via,client_service_location,client_note,needs_info_message,submitted_at,review_note,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,reviewed_at,reviewed_by,updated_at,national_service_codes(display_code,description)").eq("organization_id", id).order("updated_at", { ascending: false });
+    const { data, error } = await createAdminClient().from("service_templates").select("id,name,default_description,active,workflow_status,created_via,client_service_location,client_note,needs_info_message,submitted_at,review_note,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by,updated_at,national_service_codes(display_code,description)").eq("organization_id", id).order("updated_at", { ascending: false });
     if (error) throw error;
     return NextResponse.json({ services: data ?? [] });
   } catch {
@@ -98,7 +98,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { id: organizationId } = await params;
     const input = patchSchema.parse(await request.json());
     const db = createAdminClient();
-    const { data: existing } = await db.from("service_templates").select("id,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,workflow_status,reviewed_at,reviewed_by,active").eq("id", input.id).eq("organization_id", organizationId).maybeSingle();
+    const { data: existing } = await db.from("service_templates").select("id,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,workflow_status,reviewed_at,reviewed_by,active").eq("id", input.id).eq("organization_id", organizationId).maybeSingle();
     if (!existing) return NextResponse.json({ error: "Serviço indisponível para esta empresa." }, { status: 404 });
     const now = new Date().toISOString();
     if (input.action === "set-active") {

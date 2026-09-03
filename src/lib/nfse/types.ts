@@ -9,7 +9,7 @@ export type FiscalDocumentDomain = {
   taxConfiguration: {
     regime: "SIMPLES_NACIONAL" | "LUCRO_PRESUMIDO" | "LUCRO_REAL";
     taxationType: "MUNICIPAL" | "OUTSIDE_MUNICIPALITY" | "EXEMPT";
-    iss: { rateBasisPoints?: number; withheld: boolean; source: "OFFICE_PARAMETER" | "MUNICIPAL_INTEGRATION" };
+    iss: { rateBasisPoints?: number; withheld: boolean; source: "OFFICE_PARAMETER" | "MUNICIPAL_INTEGRATION" | "ACCEPTED_PRODUCTION_DPS" };
     retentions?: Partial<Record<"irrf" | "pis" | "cofins" | "csll" | "inss", number>>;
     ibsCbs: { customerFieldsEnabled: boolean; ibsRateBasisPoints?: number; cbsRateBasisPoints?: number };
   };

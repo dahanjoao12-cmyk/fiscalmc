@@ -18,7 +18,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const input = reviewActionSchema.parse(await request.json());
     const { id: organizationId, serviceId } = await params;
     const db = createAdminClient();
-    const { data: service } = await db.from("service_templates").select("id,active,created_via,workflow_status,submitted_at,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,reviewed_at,reviewed_by").eq("id", serviceId).eq("organization_id", organizationId).maybeSingle();
+    const { data: service } = await db.from("service_templates").select("id,active,created_via,workflow_status,submitted_at,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by").eq("id", serviceId).eq("organization_id", organizationId).maybeSingle();
     if (!service) return NextResponse.json({ error: "Serviço indisponível para esta empresa." }, { status: 404 });
     const now = new Date().toISOString();
     if (input.action === "request-info") {
