@@ -9,7 +9,7 @@ import { getCertificateReadiness } from "@/lib/nfse/certificate/status";
 import { createClientAccessService } from "@/lib/auth/client-access-service";
 import { getOrganizationReadiness } from "@/lib/organizations/readiness";
 import { buildFiscalDocument } from "@/lib/nfse/issuance/domain";
-import { prepareRestrictedDps } from "@/lib/nfse/issuance/prepare-restricted-dps";
+import { prepareRestrictedDps, type RestrictedDpsPreparationStage } from "@/lib/nfse/issuance/prepare-restricted-dps";
 import { resolveFiscalConfiguration } from "@/lib/nfse/fiscal-rule-resolver";
 import { decodeDpsFromSefin } from "@/lib/nfse/dps/encoding";
 
@@ -35,6 +35,7 @@ const operationSchema = z.object({
   competence: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   description: z.string().trim().min(5).max(2_000),
 }).strict();
+type PreflightStage = "AUTH" | "LOAD_CONFIGURATION" | "READINESS" | "FISCAL_RESOLUTION" | RestrictedDpsPreparationStage | "PAYLOAD_ASSERTION";
 
 /**
  * Builds the exact restricted-environment payload in memory. This endpoint is
@@ -42,6 +43,7 @@ const operationSchema = z.object({
  * NationalNFSeProvider.issue(), so it cannot transmit or change state.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let stage: PreflightStage = "AUTH";
   try {
     const session = await requireOfficeSession();
     if (!can(session.role, "invoice:issue")) return NextResponse.json({ error: "Acesso do escritório necessário." }, { status: 403 });
@@ -51,6 +53,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const operation = operationSchema.safeParse(await request.json());
     if (!operation.success) return NextResponse.json({ error: "Revise os dados da operação de teste." }, { status: 400 });
 
+    stage = "LOAD_CONFIGURATION";
     const db = createAdminClient();
     const [organizationResult, profileResult, serviceResult, certificateResult, clientAccessResult] = await Promise.all([
       db.from("organizations").select("id,legal_name,tax_id,municipal_registration,municipality_code,postal_code,street,address_number,address_complement,neighborhood,state,email,phone").eq("id", organizationId).maybeSingle(),
@@ -64,6 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const service = serviceResult.data;
     if (!organization || !profile || !service) return NextResponse.json({ error: "A empresa não possui a configuração necessária para esta pré-validação." }, { status: 422 });
 
+    stage = "READINESS";
     const fiscalReadiness = getFiscalConfigurationReadiness(profile);
     const serviceReadiness = getServiceReadiness(service);
     const certificateReadiness = getCertificateReadiness({ certificate: certificateResult.data, organizationTaxId: organization.tax_id });
@@ -78,6 +82,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "A prontidão da empresa precisa estar completa antes da pré-validação.", readiness: readinessResponse(organizationReadiness) }, { status: 422 });
     }
 
+    stage = "FISCAL_RESOLUTION";
     const fiscal = await resolveFiscalConfiguration({
       organizationId,
       municipalityCode: organization.municipality_code,
@@ -93,6 +98,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       serviceDate: operation.data.competence,
       dpsConfiguration: profile.dps_configuration,
     });
+    stage = "BUILD_DOCUMENT";
     const document = buildFiscalDocument({
       organization: { id: organization.id, taxId: organization.tax_id, municipalRegistration: organization.municipal_registration ?? "", municipalityCode: organization.municipality_code },
       customer: { taxId: operation.data.customer.taxId, legalName: operation.data.customer.legalName },
@@ -104,6 +110,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       dpsNumber: DRY_RUN_NUMBER,
       dpsSeries: DRY_RUN_SERIES,
     });
+    stage = "PREPARE_DPS";
     const prepared = await prepareRestrictedDps({
       organizationId,
       document,
@@ -133,7 +140,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
         totalTaxes: fiscal.dpsConfiguration.totalTaxes,
       },
+      onStage: (nextStage) => { stage = nextStage; },
     });
+    stage = "PAYLOAD_ASSERTION";
     const signedXml = decodeDpsFromSefin(prepared.preparedPayload.dpsXmlGZipB64);
     const pAliqEmitted = signedXml.includes("<pAliq>");
     if (
@@ -162,10 +171,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       invoiceCreated: false,
     });
   } catch (error) {
-    const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : "EMISSION_PREFLIGHT_FAILED";
-    console.error("EMISSION_PREFLIGHT_FAILED", { code });
+    const upstreamCode = getSafeErrorCode(error);
+    const errorName = error instanceof Error && /^[A-Za-z0-9_]{1,80}$/.test(error.name) ? error.name : "UnknownError";
+    const code = `${stage}:${upstreamCode}`;
+    console.error("EMISSION_PREFLIGHT_FAILED", { stage, upstreamCode, errorName });
     return NextResponse.json({ error: "A pré-validação da emissão não foi concluída.", code }, { status: 422 });
   }
+}
+
+function getSafeErrorCode(error: unknown) {
+  if (error && typeof error === "object" && "code" in error && typeof error.code === "string" && /^[A-Z0-9_]{1,80}$/.test(error.code)) return error.code;
+  return "EMISSION_PREFLIGHT_FAILED";
 }
 
 function readinessResponse(readiness: ReturnType<typeof getOrganizationReadiness>) {

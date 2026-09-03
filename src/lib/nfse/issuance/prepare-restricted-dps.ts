@@ -12,6 +12,7 @@ import { SafeFiscalError } from "../errors";
 
 type OrganizationInput={legalName:string;taxId:string;municipalRegistration:string;municipalityCode:string;postalCode:string;street:string;addressNumber:string;addressComplement?:string|null;neighborhood:string;state:string;email?:string|null;phone?:string|null};
 type CustomerInput={personType:string;taxId?:string|null;legalName:string;municipalRegistration?:string|null;postalCode?:string|null;street?:string|null;addressNumber?:string|null;addressComplement?:string|null;neighborhood?:string|null;municipalityCode?:string|null;state?:string|null;countryCode:string;email?:string|null;phone?:string|null};
+export type RestrictedDpsPreparationStage="PREPARE_DPS"|"BUILD_DOCUMENT"|"UNSIGNED_XSD"|"XMLDSIG"|"SIGNATURE_VERIFICATION"|"SIGNED_XSD"|"GZIP_BASE64";
 
 function customerPerson(customer:CustomerInput):DpsPerson{
   if(customer.personType==="FOREIGN")throw new SafeFiscalError("FISCAL_CONFIGURATION_INCOMPLETE","O cadastro fiscal do tomador estrangeiro precisa ser revisado.");
@@ -19,18 +20,25 @@ function customerPerson(customer:CustomerInput):DpsPerson{
   return{name:customer.legalName,...(customer.taxId?{taxId:customer.taxId}:{}),...(customer.municipalRegistration?{municipalRegistration:customer.municipalRegistration}:{}),...(customer.email?{email:customer.email}:{}),...(customer.phone?{phone:customer.phone}:{}),...(hasAddress?{address:{street:customer.street??"",number:customer.addressNumber??"",...(customer.addressComplement?{complement:customer.addressComplement}:{}),neighborhood:customer.neighborhood??"",postalCode:customer.postalCode??"",municipalityCode:customer.municipalityCode??"",stateOrProvince:customer.state??"",countryCode:customer.countryCode}}:{})};
 }
 
-export async function prepareRestrictedDps(input:{organizationId:string;document:FiscalDocumentDomain;organization:OrganizationInput;customer:CustomerInput;service:{nationalTaxCode:string;dpsMunicipalTaxCode:string;nbsCode?:string|null;locationMunicipalityCode:string};fiscal:DpsFiscalConfiguration}){
+export async function prepareRestrictedDps(input:{organizationId:string;document:FiscalDocumentDomain;organization:OrganizationInput;customer:CustomerInput;service:{nationalTaxCode:string;dpsMunicipalTaxCode:string;nbsCode?:string|null;locationMunicipalityCode:string};fiscal:DpsFiscalConfiguration;onStage?:(stage:RestrictedDpsPreparationStage)=>void}){
+  input.onStage?.("PREPARE_DPS");
   const certificateProvider=new OrganizationCertificateProvider();
   const issuer:DpsPerson={taxId:input.organization.taxId,name:input.organization.legalName,municipalRegistration:input.organization.municipalRegistration,address:{street:input.organization.street,number:input.organization.addressNumber,...(input.organization.addressComplement?{complement:input.organization.addressComplement}:{}),neighborhood:input.organization.neighborhood,postalCode:input.organization.postalCode,municipalityCode:input.organization.municipalityCode,stateOrProvince:input.organization.state,countryCode:"BR"},...(input.organization.email?{email:input.organization.email}:{}),...(input.organization.phone?{phone:input.organization.phone}:{})};
   const customer=customerPerson(input.customer);
   await assertDpsReadiness({organization:{legalName:input.organization.legalName,taxId:input.organization.taxId,municipalRegistration:input.organization.municipalRegistration,municipalityCode:input.organization.municipalityCode,address:{...issuer.address!,stateOrProvince:input.organization.state}},service:{nationalTaxCode:input.service.nationalTaxCode,municipalTaxCode:input.service.dpsMunicipalTaxCode,locationMunicipalityCode:input.service.locationMunicipalityCode},customer,fiscal:input.fiscal,certificateProvider,organizationId:input.organizationId});
+  input.onStage?.("BUILD_DOCUMENT");
   const model=mapToDpsModel(input.document,{issuer,customer,serviceLocation:{municipalityCode:input.service.locationMunicipalityCode},dpsMunicipalTaxCode:input.service.dpsMunicipalTaxCode,nbsCode:input.service.nbsCode??undefined,fiscal:input.fiscal,emittedAt:new Date().toISOString(),applicationVersion:"FISCALMC_0.1"});
   const unsignedXml=buildDpsXml(model);
+  input.onStage?.("UNSIGNED_XSD");
   const unsignedValidation=await validateDpsXml(unsignedXml);
   if(!unsignedValidation.valid)throw new SafeFiscalError("BUILD_FAILED","A DPS gerada não passou na validação oficial.");
+  input.onStage?.("XMLDSIG");
   const signedXml=await signDpsXml(unsignedXml,{certificateProvider,organizationId:input.organizationId});
+  input.onStage?.("SIGNATURE_VERIFICATION");
   verifyDpsSignature(signedXml);
+  input.onStage?.("SIGNED_XSD");
   const signedValidation=await validateDpsXml(signedXml);
   if(!signedValidation.valid)throw new SafeFiscalError("SIGNATURE_FAILED","A DPS assinada não passou na validação oficial.");
+  input.onStage?.("GZIP_BASE64");
   return{model,preparedPayload:buildSefinDpsRequest(signedXml)};
 }

@@ -31,6 +31,7 @@ const validationLabels: Array<[keyof PreflightResult["validation"], string]> = [
 export function EmissionPreflight({ organizationId, canRun }: { organizationId: string; canRun: boolean }) {
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [running, setRunning] = useState(false);
   const [operation, setOperation] = useState({
     taxId: "",
@@ -59,6 +60,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
     }
     setRunning(true);
     setError("");
+    setErrorCode("");
     setResult(null);
     try {
       const response = await fetch(`/api/admin/organizations/${organizationId}/emission-preflight`, {
@@ -83,11 +85,13 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         setError(data?.error ?? "Não foi possível concluir a pré-validação.");
+        setErrorCode(typeof data?.code === "string" ? data.code : "");
         return;
       }
       setResult(data as PreflightResult);
     } catch {
       setError("Não foi possível concluir a pré-validação agora. Tente novamente.");
+      setErrorCode("");
     } finally {
       setRunning(false);
     }
@@ -120,7 +124,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
         {running ? <><LoaderCircle className="spin" size={17} />Pré-validando…</> : "Pré-validar emissão"}
       </button></div>
     </form>
-    {error ? <p className="alert error" role="alert">{error}</p> : null}
+    {error ? <p className="alert error" role="alert">{error}{errorCode ? <><br />Código: <strong>{errorCode}</strong></> : null}</p> : null}
     {result ? <div className="emission-preflight-result" aria-live="polite">
       <strong>Pré-validação concluída</strong>
       <div className="emission-preflight-grid">
