@@ -6,6 +6,7 @@ import { FiscalConfigurationForm } from "@/components/fiscal-configuration-form"
 import { CertificateManager } from "@/components/certificate-manager";
 import { ClientAccessManager } from "@/components/client-access-manager";
 import { MunicipalRegistrationForm } from "@/components/municipal-registration-form";
+import { EmissionPreflight } from "@/components/emission-preflight";
 import { IssueForm, type IssueCustomer, type IssueService } from "@/components/issue-form";
 import { StatusBadge, formatDate, formatTaxId } from "@/components/ui-kit";
 import { requireOfficeSession } from "@/lib/auth/session";
@@ -37,6 +38,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   const canManageCertificate = can(officeSession.role, "certificate:write");
   const canReadClientAccess = can(officeSession.role, "client-access:read");
   const canManageClientAccess = can(officeSession.role, "client-access:write");
+  const canRunEmissionPreflight = can(officeSession.role, "invoice:issue");
   const [companyResult, servicesResult, taxProfileResult, catalogResult, customersResult, certificateResult, clientAccessResult, lastInvoiceResult] = await Promise.all([
     db.from("organizations").select("id,legal_name,trade_name,tax_id,municipality_code,status,emission_blocked,municipal_registration,street,address_number,address_complement,neighborhood,state,postal_code,email,phone").eq("id", id).maybeSingle(),
     needsServices ? db.from("service_templates").select("id,name,default_description,active,workflow_status,created_via,client_service_location,client_note,needs_info_message,submitted_at,review_note,updated_at,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by,national_service_codes(display_code,description)").eq("organization_id", id).order("updated_at", { ascending: false }) : Promise.resolve({ data: [] }),
@@ -93,7 +95,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
         {pendingItems.length ? <section className="v2-panel v2-company-pending"><div className="v2-panel-heading"><div><h2>Pendências</h2></div><ShieldAlert size={20} /></div>{pendingItems.map((item) => <Link href={`/admin/empresas/${id}?tab=${readinessTabs[item.key]}`} key={item.key}><span>{readinessLabels[item.key]}</span><ArrowRight size={15} /></Link>)}</section> : null}
       </aside>
     </div> : null}
-    {tab === "issue" ? <section className="v2-issue-admin"><IssueForm customers={issueCustomers} services={issueServices} issuanceOrganizationId={company.id} /></section> : null}
+    {tab === "issue" ? <section className="v2-issue-admin"><EmissionPreflight organizationId={company.id} canRun={canRunEmissionPreflight} /><IssueForm customers={issueCustomers} services={issueServices} issuanceOrganizationId={company.id} /></section> : null}
     {tab === "services" ? <ServiceManager organizationId={company.id} municipalityCode={company.municipality_code} initialServices={serviceDtos} catalogAvailable={Boolean(catalogResult.count)} initialSelectedServiceId={selectedServiceId ?? null} /> : null}
     {tab === "fiscal" ? <FiscalConfigurationForm organizationId={company.id} initialConfiguration={fiscalReadiness} /> : null}
     {tab === "certificate" ? canReadCertificate ? <CertificateManager organizationId={company.id} organizationTaxId={company.tax_id} initialCertificate={certificateResult.data} canWrite={canManageCertificate} /> : <Notice title="Certificado" text="Seu perfil não pode consultar certificados." /> : null}

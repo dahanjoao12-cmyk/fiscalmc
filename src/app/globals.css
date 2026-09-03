@@ -580,6 +580,21 @@ textarea.input { min-height:92px; }
 .request-info-block { background:#fffaf5; }
 .request-info-block .button { margin-top:12px; }
 .service-analysis-actions { padding:16px 24px; display:flex; justify-content:flex-end; gap:9px; background:var(--surface); }
+.emission-preflight { margin-bottom:18px; }
+.emission-preflight-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 16px; padding:16px 20px; }
+.emission-preflight-form label { display:grid; gap:6px; color:var(--muted); font-size:12px; font-weight:650; }
+.emission-preflight-form input,.emission-preflight-form textarea { width:100%; }
+.emission-preflight-form .full { grid-column:1 / -1; }
+.emission-preflight-form .form-help { margin:0; color:var(--muted); font-size:12px; }
+.emission-preflight-actions { display:flex; justify-content:flex-start; }
+.emission-preflight > .alert { margin:0 20px 16px; }
+.emission-preflight-result { padding:0 20px 18px; color:var(--navy); font-size:13px; }
+.emission-preflight-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 28px; margin:14px 0; }
+.emission-preflight-grid > div { display:grid; gap:7px; }
+.emission-preflight-grid span { display:flex; align-items:center; gap:7px; font-size:12px; }
+.emission-preflight-grid .is-pass { color:var(--emerald-dark); }
+.emission-preflight-grid .is-fail { color:var(--danger); }
+.emission-preflight-result > p { margin:7px 0 0; color:var(--muted); }
 
 @media (max-width: 1100px) {
   .v2-metrics { grid-template-columns:repeat(2,1fr); }
@@ -647,6 +662,8 @@ textarea.input { min-height:92px; }
   .service-analysis-block .form-grid .full { grid-column:auto; }
   .service-analysis-actions { position:sticky; bottom:0; z-index:2; flex-wrap:wrap; }
   .service-analysis-actions .button { flex:1; }
+  .emission-preflight-form,.emission-preflight-grid { grid-template-columns:1fr; }
+  .emission-preflight > .alert,.emission-preflight-result { margin-left:14px; margin-right:14px; }
   .auth-layout { grid-template-columns:1fr; background:#fff; }
   .auth-brand-panel { min-height:220px; padding:28px 24px; }
   .auth-brand-panel > div { margin-top:38px; }
