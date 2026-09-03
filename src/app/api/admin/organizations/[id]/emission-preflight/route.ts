@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const organizationIdSchema = z.string().uuid();
-const DRY_RUN_SERIES = "99999";
+const DRY_RUN_SERIES = "00000";
 const DRY_RUN_NUMBER = 999999999999999n;
 const digits = (value: string) => value.replace(/\D/g, "");
 const operationSchema = z.object({

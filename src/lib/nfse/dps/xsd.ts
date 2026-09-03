@@ -92,8 +92,34 @@ function virtualSchemaUrl(fileName:string){return `${virtualSchemaBase}${fileNam
 function parseOptions(url:string){return {url,option:ParseOption.XML_PARSE_NONET|ParseOption.XML_PARSE_NO_XXE};}
 
 function safeValidationError(message:string,lineNumber:number|undefined){
+  const element=localXsdName(message.match(/Element '([^']+)'/)?.[1]);
+  const facet=message.match(/\[facet '([^']+)'\]/)?.[1];
+  const pattern=message.match(/pattern '([^']+)'/)?.[1];
+  const value=message.match(/The value '([^']*)'/)?.[1];
+  if(element&&facet&&isSafeXsdToken(element)&&isSafeXsdToken(facet)){
+    const parts=[`Elemento: ${element}`,`Facet: ${facet}`];
+    if(pattern)parts.push(`Pattern esperado: ${safeXsdPattern(pattern)}`);
+    if(value!==undefined)parts.push(`Valor: [redacted]`,`Comprimento: ${Array.from(value).length}`,`Características: ${valueShape(value)}`);
+    const summary=parts.join("; ");
+    return lineNumber?`Linha ${lineNumber}: ${summary}`:summary;
+  }
   const redacted=message.replace(/(?:[A-Za-z]:)?[\\/][^\s'\"]+/g,"[path]").replace(/https?:\/\/[^\s'\"]+/g,"[url]").replace(/'[^']*'/g,"'[redacted]'").replace(/\"[^\"]*\"/g,'"[redacted]"').trim();
   return lineNumber?`Linha ${lineNumber}: ${redacted}`:redacted;
+}
+
+function isSafeXsdToken(value:string){return /^[A-Za-z_][A-Za-z0-9_.:-]{0,80}$/.test(value);}
+function localXsdName(value:string|undefined){
+  if(!value)return undefined;
+  const local=value.split("}").at(-1)?.split(":").at(-1);
+  return local&&isSafeXsdToken(local)?local:undefined;
+}
+function safeXsdPattern(value:string){return value.replace(/[^A-Za-z0-9\[\]{}()|+*?^$\\,.:\-]/g,"").slice(0,250);}
+function valueShape(value:string){
+  if(/^\d+$/.test(value))return "somente dígitos";
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value))return "datetime UTC com milissegundos e sufixo Z";
+  if(/^[A-Za-z0-9]+$/.test(value))return "alfanumérico";
+  if(/[\p{P}\p{S}]/u.test(value))return "contém pontuação";
+  return "texto";
 }
 
 function safeRuntimeDiagnostic(error:unknown):SafeRuntimeDiagnostic{

@@ -7,6 +7,7 @@ import { buildDpsXml } from "../dps/xml";
 import { validateDpsXml } from "../dps/xsd";
 import { signDpsXml,verifyDpsSignature } from "../dps/signature";
 import { buildSefinDpsRequest } from "../dps/sefin-request";
+import { formatDpsDateTimeUtc } from "../dps/date-time";
 import { OrganizationCertificateProvider } from "../certificate/organization-provider";
 import { SafeFiscalError } from "../errors";
 
@@ -27,7 +28,7 @@ export async function prepareRestrictedDps(input:{organizationId:string;document
   const customer=customerPerson(input.customer);
   await assertDpsReadiness({organization:{legalName:input.organization.legalName,taxId:input.organization.taxId,municipalRegistration:input.organization.municipalRegistration,municipalityCode:input.organization.municipalityCode,address:{...issuer.address!,stateOrProvince:input.organization.state}},service:{nationalTaxCode:input.service.nationalTaxCode,municipalTaxCode:input.service.dpsMunicipalTaxCode,locationMunicipalityCode:input.service.locationMunicipalityCode},customer,fiscal:input.fiscal,certificateProvider,organizationId:input.organizationId});
   input.onStage?.("BUILD_DOCUMENT");
-  const model=mapToDpsModel(input.document,{issuer,customer,serviceLocation:{municipalityCode:input.service.locationMunicipalityCode},dpsMunicipalTaxCode:input.service.dpsMunicipalTaxCode,nbsCode:input.service.nbsCode??undefined,fiscal:input.fiscal,emittedAt:new Date().toISOString(),applicationVersion:"FISCALMC_0.1"});
+  const model=mapToDpsModel(input.document,{issuer,customer,serviceLocation:{municipalityCode:input.service.locationMunicipalityCode},dpsMunicipalTaxCode:input.service.dpsMunicipalTaxCode,nbsCode:input.service.nbsCode??undefined,fiscal:input.fiscal,emittedAt:formatDpsDateTimeUtc(new Date()),applicationVersion:"FISCALMC_0.1"});
   const unsignedXml=buildDpsXml(model);
   input.onStage?.("UNSIGNED_XSD");
   const unsignedValidation=await validateDpsXml(unsignedXml);

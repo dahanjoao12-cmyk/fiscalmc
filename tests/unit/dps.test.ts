@@ -4,6 +4,7 @@ import { describe,expect,it } from "vitest";
 import { buildDpsIdentifier } from "@/lib/nfse/dps/identifier";
 import { decodeDpsFromSefin,encodeDpsForSefin } from "@/lib/nfse/dps/encoding";
 import { validateDpsXml,validateMinimalXsd,validateXsdRuntimeProbe } from "@/lib/nfse/dps/xsd";
+import { formatDpsDateTimeUtc } from "@/lib/nfse/dps/date-time";
 import { assertDpsReadiness } from "@/lib/nfse/dps/readiness";
 import { mapToDpsModel } from "@/lib/nfse/dps/model";
 import { buildDpsXml } from "@/lib/nfse/dps/xml";
@@ -22,6 +23,21 @@ describe("DPS v1.01",()=>{
   it("rejeita elemento fora da ordem",async()=>expect((await validateDpsXml((await fixture()).replace("<serie>00001</serie><nDPS>1</nDPS>","<nDPS>1</nDPS><serie>00001</serie>"))).valid).toBe(false));
   it("rejeita código de serviço inválido sem expor o valor no erro",async()=>{const result=await validateDpsXml((await fixture()).replace("070201","invalid"));expect(result.valid).toBe(false);expect(result.errors.join(" ")).not.toContain("invalid");});
   it("rejeita data inválida",async()=>expect((await validateDpsXml((await fixture()).replace("2026-08-25","2026-99-99"))).valid).toBe(false));
+  it("expõe a restrição XSD sem expor valores quando série e dhEmi são inválidos",async()=>{
+    const xml=(await fixture()).replace("<dhEmi>2026-08-25T09:00:00-03:00</dhEmi>","<dhEmi>2026-09-02T12:00:00.000Z</dhEmi>").replace("<serie>00001</serie>","<serie>99999</serie>");
+    const result=await validateDpsXml(xml);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toHaveLength(2);
+    expect(result.errors.join(" ")).toContain("Elemento: dhEmi");
+    expect(result.errors.join(" ")).toContain("Elemento: serie");
+    expect(result.errors.join(" ")).toContain("Pattern esperado:");
+    expect(result.errors.join(" ")).not.toContain("99999");
+    expect(result.errors.join(" ")).not.toContain("2026-09-02T12:00:00.000Z");
+  });
+  it("aceita série de cinco dígitos compatível e dhEmi no formato oficial",async()=>{
+    const xml=(await fixture()).replace("<dhEmi>2026-08-25T09:00:00-03:00</dhEmi>",`<dhEmi>${formatDpsDateTimeUtc(new Date("2026-09-02T12:00:00.000Z"))}</dhEmi>`).replace("<serie>00001</serie>","<serie>00000</serie>");
+    await expect(validateDpsXml(xml)).resolves.toMatchObject({valid:true,errors:[]});
+  });
   it("não depende de bindings nativos ou do runtime xmllint",()=>{const require=createRequire(import.meta.url);expect(()=>require.resolve("libxmljs2")).toThrow();expect(()=>require.resolve("xmllint-wasm")).toThrow();});
   it("preserva XML em GZip/Base64",async()=>{const xml=await fixture();expect(decodeDpsFromSefin(encodeDpsForSefin(xml))).toBe(xml);});
   it("omite pAliq quando a alíquota é parametrizada pelo Sistema Nacional",()=>{
