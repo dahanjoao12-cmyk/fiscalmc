@@ -11,6 +11,7 @@ type PreflightResult = {
   sequenceConsumed: boolean;
   invoiceCreated: boolean;
 };
+type XsdDiagnostic = { errorCount: number; errors: string[] };
 
 const readinessLabels: Array<[keyof PreflightResult["readiness"], string]> = [
   ["registration", "Cadastro"],
@@ -32,6 +33,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [error, setError] = useState("");
   const [errorCode, setErrorCode] = useState("");
+  const [xsdDiagnostic, setXsdDiagnostic] = useState<XsdDiagnostic | null>(null);
   const [running, setRunning] = useState(false);
   const [operation, setOperation] = useState({
     taxId: "",
@@ -61,6 +63,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
     setRunning(true);
     setError("");
     setErrorCode("");
+    setXsdDiagnostic(null);
     setResult(null);
     try {
       const response = await fetch(`/api/admin/organizations/${organizationId}/emission-preflight`, {
@@ -86,12 +89,14 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
       if (!response.ok) {
         setError(data?.error ?? "Não foi possível concluir a pré-validação.");
         setErrorCode(typeof data?.code === "string" ? data.code : "");
+        setXsdDiagnostic(isXsdDiagnostic(data?.xsdDiagnostic) ? data.xsdDiagnostic : null);
         return;
       }
       setResult(data as PreflightResult);
     } catch {
       setError("Não foi possível concluir a pré-validação agora. Tente novamente.");
       setErrorCode("");
+      setXsdDiagnostic(null);
     } finally {
       setRunning(false);
     }
@@ -124,7 +129,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
         {running ? <><LoaderCircle className="spin" size={17} />Pré-validando…</> : "Pré-validar emissão"}
       </button></div>
     </form>
-    {error ? <p className="alert error" role="alert">{error}{errorCode ? <><br />Código: <strong>{errorCode}</strong></> : null}</p> : null}
+    {error ? <div className="alert error" role="alert"><p>{error}{errorCode ? <><br />Código: <strong>{errorCode}</strong></> : null}</p>{xsdDiagnostic ? <div className="emission-preflight-xsd-errors"><strong>Erros XSD ({xsdDiagnostic.errorCount})</strong><ol>{xsdDiagnostic.errors.map((entry, index) => <li key={`${index}-${entry}`}>{entry}</li>)}</ol></div> : null}</div> : null}
     {result ? <div className="emission-preflight-result" aria-live="polite">
       <strong>Pré-validação concluída</strong>
       <div className="emission-preflight-grid">
@@ -140,4 +145,8 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
 
 function StatusLine({ label, passed }: { label: string; passed: boolean }) {
   return <span className={passed ? "is-pass" : "is-fail"}>{passed ? <CheckCircle2 size={16} aria-hidden="true" /> : <XCircle size={16} aria-hidden="true" />}{label}: {passed ? "PASS" : "FAIL"}</span>;
+}
+
+function isXsdDiagnostic(value: unknown): value is XsdDiagnostic {
+  return Boolean(value && typeof value === "object" && "errorCount" in value && typeof value.errorCount === "number" && "errors" in value && Array.isArray(value.errors) && value.errors.every((entry) => typeof entry === "string"));
 }

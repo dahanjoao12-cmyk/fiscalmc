@@ -44,9 +44,11 @@ type PreflightStage = "AUTH" | "LOAD_CONFIGURATION" | "READINESS" | "FISCAL_RESO
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   let stage: PreflightStage = "AUTH";
+  let canViewXsdDiagnostics = false;
   try {
     const session = await requireOfficeSession();
     if (!can(session.role, "invoice:issue")) return NextResponse.json({ error: "Acesso do escritório necessário." }, { status: 403 });
+    canViewXsdDiagnostics = session.role === "SUPER_ADMIN";
 
     const { id: organizationId } = await params;
     if (!organizationIdSchema.safeParse(organizationId).success) return NextResponse.json({ error: "Empresa não encontrada." }, { status: 404 });
@@ -174,14 +176,39 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const upstreamCode = getSafeErrorCode(error);
     const errorName = error instanceof Error && /^[A-Za-z0-9_]{1,80}$/.test(error.name) ? error.name : "UnknownError";
     const code = `${stage}:${upstreamCode}`;
-    console.error("EMISSION_PREFLIGHT_FAILED", { stage, upstreamCode, errorName });
-    return NextResponse.json({ error: "A pré-validação da emissão não foi concluída.", code }, { status: 422 });
+    const xsdDiagnostic = isUnsignedXsdStage(stage) ? getSafeXsdDiagnostic(error) : undefined;
+    console.error("EMISSION_PREFLIGHT_FAILED", {
+      stage,
+      upstreamCode,
+      errorName,
+      ...(xsdDiagnostic ? { xsdErrorCount: xsdDiagnostic.errorCount, xsdErrors: xsdDiagnostic.errors } : {}),
+    });
+    return NextResponse.json({
+      error: "A pré-validação da emissão não foi concluída.",
+      code,
+      ...(canViewXsdDiagnostics && xsdDiagnostic ? { xsdDiagnostic } : {}),
+    }, { status: 422 });
   }
 }
 
 function getSafeErrorCode(error: unknown) {
   if (error && typeof error === "object" && "code" in error && typeof error.code === "string" && /^[A-Z0-9_]{1,80}$/.test(error.code)) return error.code;
   return "EMISSION_PREFLIGHT_FAILED";
+}
+
+function isUnsignedXsdStage(stage: PreflightStage) {
+  return stage === "UNSIGNED_XSD";
+}
+
+function getSafeXsdDiagnostic(error: unknown) {
+  if (!error || typeof error !== "object" || !("xsdDiagnostic" in error) || !error.xsdDiagnostic || typeof error.xsdDiagnostic !== "object") return undefined;
+  const source = error.xsdDiagnostic as { errorCount?: unknown; errors?: unknown };
+  if (typeof source.errorCount !== "number" || !Array.isArray(source.errors)) return undefined;
+  const errors = source.errors
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.replace(/(?:[A-Za-z]:)?[\\/][^\s'\"]+/g, "[path]").replace(/https?:\/\/[^\s'\"]+/g, "[url]").slice(0, 400))
+    .slice(0, 5);
+  return { errorCount: source.errorCount, errors };
 }
 
 function readinessResponse(readiness: ReturnType<typeof getOrganizationReadiness>) {

@@ -31,7 +31,11 @@ export async function prepareRestrictedDps(input:{organizationId:string;document
   const unsignedXml=buildDpsXml(model);
   input.onStage?.("UNSIGNED_XSD");
   const unsignedValidation=await validateDpsXml(unsignedXml);
-  if(!unsignedValidation.valid)throw new SafeFiscalError("BUILD_FAILED","A DPS gerada não passou na validação oficial.");
+  if(!unsignedValidation.valid){
+    const error=new SafeFiscalError("BUILD_FAILED","A DPS gerada não passou na validação oficial.");
+    Object.assign(error,{xsdDiagnostic:{errorCount:unsignedValidation.errors.length,errors:unsignedValidation.errors.slice(0,5)}});
+    throw error;
+  }
   input.onStage?.("XMLDSIG");
   const signedXml=await signDpsXml(unsignedXml,{certificateProvider,organizationId:input.organizationId});
   input.onStage?.("SIGNATURE_VERIFICATION");

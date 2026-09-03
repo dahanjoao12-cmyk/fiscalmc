@@ -588,6 +588,10 @@ textarea.input { min-height:92px; }
 .emission-preflight-form .form-help { margin:0; color:var(--muted); font-size:12px; }
 .emission-preflight-actions { display:flex; justify-content:flex-start; }
 .emission-preflight > .alert { margin:0 20px 16px; }
+.emission-preflight > .alert > p { margin:0; }
+.emission-preflight-xsd-errors { margin-top:12px; }
+.emission-preflight-xsd-errors ol { margin:7px 0 0; padding-left:20px; }
+.emission-preflight-xsd-errors li { margin:4px 0; overflow-wrap:anywhere; }
 .emission-preflight-result { padding:0 20px 18px; color:var(--navy); font-size:13px; }
 .emission-preflight-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 28px; margin:14px 0; }
 .emission-preflight-grid > div { display:grid; gap:7px; }
