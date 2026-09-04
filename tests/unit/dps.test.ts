@@ -76,6 +76,8 @@ describe("DPS v1.01",()=>{
     const xml=buildDpsXml(model);
     expect(xml).toContain("<cNBS>113022100</cNBS>");
     expect(xml).not.toContain("<pAliq>");
+    expect(xml).not.toContain("<indTotTrib>");
+    expect(xml).toContain("<pTotTrib><pTotTribFed>0.00</pTotTribFed><pTotTribEst>0.00</pTotTribEst><pTotTribMun>0.00</pTotTribMun></pTotTrib>");
   });
   it("mantém a IM no cadastro pronta mesmo quando a DPS Nacional a omite",()=>{
     const readiness=getOrganizationReadiness({registration:{municipalRegistration:"0.191.068-0",street:"Av. Rio Branco",addressNumber:"99",neighborhood:"Centro",state:"RJ"},fiscal:{ready:true,message:""},services:{ready:true,message:""},certificate:{ready:true,message:""},clientAccess:{ready:true,message:""}});
@@ -95,6 +97,37 @@ describe("DPS v1.01",()=>{
     const xml=buildDpsXml(modelWithIssuerMunicipalRegistration(false));
     expect(xml).not.toContain("<prest><CNPJ>40241895000170</CNPJ><IM>");
     expect(xml).toContain("<prest><CNPJ>40241895000170</CNPJ><xNome>");
+  });
+  it("omite nome e endereço do prestador quando a DPS é emitida pelo próprio prestador",async()=>{
+    const model=modelWithIssuerMunicipalRegistration(false);
+    model.issuer.emitName=false;
+    model.issuer.emitAddress=false;
+    const xml=buildDpsXml(model);
+    const prest=xml.match(/<prest>([\s\S]*?)<\/prest>/)?.[1]??"";
+    const toma=xml.match(/<toma>([\s\S]*?)<\/toma>/)?.[1]??"";
+    expect(prest).not.toContain("<xNome>");
+    expect(prest).not.toContain("<end>");
+    expect(toma).toContain("<xNome>ORLA RIO CONCESSIONARIA LTDA.</xNome>");
+    expect(toma).toContain("<end>");
+    await expect(validateDpsXml(xml)).resolves.toMatchObject({valid:true,errors:[]});
+  });
+  it("simula a DPS 00001/6 sem reservar sequência ou transmitir",async()=>{
+    const model=modelWithIssuerMunicipalRegistration(false);
+    model.number=6n;
+    model.id=buildDpsIdentifier({municipalityCode:"3304557",taxId:"40241895000170",series:"00001",number:6n});
+    model.issuer.emitName=false;
+    model.issuer.emitAddress=false;
+    const xml=buildDpsXml(model);
+    const prest=xml.match(/<prest>([\s\S]*?)<\/prest>/)?.[1]??"";
+    expect(model.id).toBe("DPS330455724024189500017000001000000000000006");
+    expect(model.id).toHaveLength(45);
+    expect(xml).not.toContain("<prest><CNPJ>40241895000170</CNPJ><IM>");
+    expect(prest).not.toContain("<xNome>");
+    expect(prest).not.toContain("<end>");
+    expect(xml).not.toContain("<indTotTrib>");
+    expect(xml).toContain("<pTotTrib>");
+    expect(encodeDpsForSefin(xml)).toMatch(/^[A-Za-z0-9+/=]+$/);
+    await expect(validateDpsXml(xml)).resolves.toMatchObject({valid:true,errors:[]});
   });
   it("bloqueia prontidão DPS sem o código municipal de três dígitos",async()=>await expect(assertDpsReadiness({organization:{legalName:"Prestador",taxId:"12345678000195",municipalRegistration:"123",municipalityCode:"3304557",address:{street:"Rua",number:"1",neighborhood:"Centro",postalCode:"20000000",municipalityCode:"3304557",stateOrProvince:"RJ"}},service:{nationalTaxCode:"070201",municipalTaxCode:"07.02.01.001",locationMunicipalityCode:"3304557"},customer:{name:"Tomador",taxId:"52998224725"},fiscal:{regime:{simpleNational:"1",special:"0"},iss:{taxation:"1",withholding:"1",rateSource:"EMITTER_PROVIDED",rateBasisPoints:500},totalTaxes:{indicator:"0"}},verifyCertificate:false})).rejects.toMatchObject({code:"FISCAL_CONFIGURATION_INCOMPLETE"}));
 });

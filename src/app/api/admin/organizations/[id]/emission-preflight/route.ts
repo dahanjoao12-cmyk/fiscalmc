@@ -148,8 +148,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     stage = "PAYLOAD_ASSERTION";
     const signedXml = decodeDpsFromSefin(prepared.preparedPayload.dpsXmlGZipB64);
     const pAliqEmitted = signedXml.includes("<pAliq>");
+    const prestXml = signedXml.match(/<prest>([\s\S]*?)<\/prest>/)?.[1] ?? "";
+    const issuerMunicipalRegistrationCompliant = fiscal.issuerMunicipalRegistrationEmission === "OMIT" ? !prestXml.includes("<IM>") : true;
+    const totalTaxesCompliant = fiscal.dpsConfiguration.regime.simpleNational === "3"
+      ? !signedXml.includes("<indTotTrib>") && signedXml.includes("<pTotTrib>")
+      : true;
+    const businessRulesPassed = issuerMunicipalRegistrationCompliant && !prestXml.includes("<xNome>") && !prestXml.includes("<end>") && totalTaxesCompliant;
     if (
       pAliqEmitted
+      || !businessRulesPassed
       || prepared.model.service.nationalTaxCode !== "171901"
       || prepared.model.service.municipalTaxCode !== "001"
       || prepared.model.service.nbsCode !== "113022100"
@@ -167,7 +174,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return NextResponse.json({
       readiness: readinessResponse(organizationReadiness),
-      validation: { dpsBuilt: true, unsignedXsd: true, xmldsig: true, signatureVerification: true, signedXsd: true, gzipBase64: true, payload: true, pAliqEmitted: false },
+      validation: { dpsBuilt: true, unsignedXsd: true, xmldsig: true, signatureVerification: true, signedXsd: true, gzipBase64: true, payload: true, businessRules: true, pAliqEmitted: false },
       target: { environment: "PRODUCTION_RESTRICTED", method: "POST", contentType: "application/json", provider: "NATIONAL" },
       transmissionAttempted: false,
       sequenceConsumed: false,

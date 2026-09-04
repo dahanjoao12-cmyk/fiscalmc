@@ -5,7 +5,7 @@ import { CheckCircle2, LoaderCircle, ShieldCheck, XCircle } from "lucide-react";
 
 type PreflightResult = {
   readiness: { registration: boolean; fiscal: boolean; service: boolean; certificate: boolean; clientAccess: boolean; organization: boolean };
-  validation: { dpsBuilt: boolean; unsignedXsd: boolean; xmldsig: boolean; signatureVerification: boolean; signedXsd: boolean; gzipBase64: boolean; payload: boolean; pAliqEmitted: boolean };
+  validation: { dpsBuilt: boolean; unsignedXsd: boolean; xmldsig: boolean; signatureVerification: boolean; signedXsd: boolean; gzipBase64: boolean; payload: boolean; businessRules: boolean; pAliqEmitted: boolean };
   target: { environment: string };
   transmissionAttempted: boolean;
   sequenceConsumed: boolean;
@@ -27,6 +27,7 @@ const validationLabels: Array<[keyof PreflightResult["validation"], string]> = [
   ["signedXsd", "XSD da DPS assinada"],
   ["gzipBase64", "GZip/Base64"],
   ["payload", "Payload"],
+  ["businessRules", "Regras de negócio"],
 ];
 
 export function EmissionPreflight({ organizationId, canRun }: { organizationId: string; canRun: boolean }) {
