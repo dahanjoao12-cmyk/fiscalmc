@@ -12,6 +12,9 @@ import { buildFiscalDocument } from "@/lib/nfse/issuance/domain";
 import { prepareRestrictedDps, type RestrictedDpsPreparationStage } from "@/lib/nfse/issuance/prepare-restricted-dps";
 import { resolveFiscalConfiguration } from "@/lib/nfse/fiscal-rule-resolver";
 import { decodeDpsFromSefin } from "@/lib/nfse/dps/encoding";
+import { MunicipalParametersProvider } from "@/lib/nfse/municipal-parameters/client";
+import { MtlsHttpClient } from "@/lib/nfse/client/mtls-http-client";
+import { OrganizationCertificateProvider } from "@/lib/nfse/certificate/organization-provider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +38,7 @@ const operationSchema = z.object({
   competence: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   description: z.string().trim().min(5).max(2_000),
 }).strict();
-type PreflightStage = "AUTH" | "LOAD_CONFIGURATION" | "READINESS" | "FISCAL_RESOLUTION" | RestrictedDpsPreparationStage | "PAYLOAD_ASSERTION";
+type PreflightStage = "AUTH" | "LOAD_CONFIGURATION" | "READINESS" | "FISCAL_RESOLUTION" | "DYNAMIC_RULES" | RestrictedDpsPreparationStage | "PAYLOAD_ASSERTION";
 
 /**
  * Builds the exact restricted-environment payload in memory. This endpoint is
@@ -100,6 +103,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       serviceDate: operation.data.competence,
       dpsConfiguration: profile.dps_configuration,
     });
+    stage = "DYNAMIC_RULES";
+    if (!service.municipal_service_code) return NextResponse.json({ error: "O código municipal do serviço precisa ser revisado antes da pré-validação." }, { status: 422 });
+    const municipalParameters = new MunicipalParametersProvider(new MtlsHttpClient(new OrganizationCertificateProvider()), undefined, organizationId);
+    await Promise.all([
+      municipalParameters.getConvention(organization.municipality_code),
+      municipalParameters.getRetentions({ municipalityCode: organization.municipality_code, competence: operation.data.competence }),
+      municipalParameters.getAliquota({ municipalityCode: organization.municipality_code, serviceCode: service.municipal_service_code, competence: operation.data.competence }),
+    ]);
     stage = "BUILD_DOCUMENT";
     const document = buildFiscalDocument({
       organization: { id: organization.id, taxId: organization.tax_id, municipalRegistration: organization.municipal_registration ?? "", municipalityCode: organization.municipality_code },
@@ -174,7 +185,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return NextResponse.json({
       readiness: readinessResponse(organizationReadiness),
-      validation: { dpsBuilt: true, unsignedXsd: true, xmldsig: true, signatureVerification: true, signedXsd: true, gzipBase64: true, payload: true, businessRules: true, pAliqEmitted: false },
+      validation: { dpsBuilt: true, dynamicRules: true, unsignedXsd: true, xmldsig: true, signatureVerification: true, signedXsd: true, gzipBase64: true, payload: true, businessRules: true, pAliqEmitted: false },
       target: { environment: "PRODUCTION_RESTRICTED", method: "POST", contentType: "application/json", provider: "NATIONAL" },
       transmissionAttempted: false,
       sequenceConsumed: false,

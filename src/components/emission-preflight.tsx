@@ -5,7 +5,7 @@ import { CheckCircle2, LoaderCircle, ShieldCheck, XCircle } from "lucide-react";
 
 type PreflightResult = {
   readiness: { registration: boolean; fiscal: boolean; service: boolean; certificate: boolean; clientAccess: boolean; organization: boolean };
-  validation: { dpsBuilt: boolean; unsignedXsd: boolean; xmldsig: boolean; signatureVerification: boolean; signedXsd: boolean; gzipBase64: boolean; payload: boolean; businessRules: boolean; pAliqEmitted: boolean };
+  validation: { dpsBuilt: boolean; dynamicRules: boolean; unsignedXsd: boolean; xmldsig: boolean; signatureVerification: boolean; signedXsd: boolean; gzipBase64: boolean; payload: boolean; businessRules: boolean; pAliqEmitted: boolean };
   target: { environment: string };
   transmissionAttempted: boolean;
   sequenceConsumed: boolean;
@@ -21,6 +21,7 @@ const readinessLabels: Array<[keyof PreflightResult["readiness"], string]> = [
 ];
 const validationLabels: Array<[keyof PreflightResult["validation"], string]> = [
   ["dpsBuilt", "DPS construída"],
+  ["dynamicRules", "Parâmetros oficiais"],
   ["unsignedXsd", "XSD da DPS"],
   ["xmldsig", "XMLDSIG"],
   ["signatureVerification", "Assinatura verificada"],
