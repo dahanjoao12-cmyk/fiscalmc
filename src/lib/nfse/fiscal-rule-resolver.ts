@@ -6,17 +6,19 @@ import { MunicipalParametersProvider,issPercentToBasisPoints,parseMunicipalServi
 import { MtlsHttpClient } from "./client/mtls-http-client";
 import { OrganizationCertificateProvider } from "./certificate/organization-provider";
 import { issRateSourceSchema, matchesAcceptedProductionDpsReference, type IssRateSource } from "./service-fiscal-reference";
+import { issuerMunicipalRegistrationEmissionSchema } from "./fiscal-configuration";
 
-const dpsTaxConfigurationSchema=z.object({iss:z.object({withholdingType:z.enum(["1","2","3"]),benefitNumber:z.string().min(1).optional()}),regime:z.object({simpleNational:z.enum(["1","2","3"]),simpleAssessment:z.enum(["1","2","3"]).optional(),special:z.enum(["0","1","2","3","4","5","6","9"])}),totalTaxes:z.object({indicator:z.literal("0")})});
+const dpsTaxConfigurationSchema=z.object({iss:z.object({withholdingType:z.enum(["1","2","3"]),benefitNumber:z.string().min(1).optional()}),regime:z.object({simpleNational:z.enum(["1","2","3"]),simpleAssessment:z.enum(["1","2","3"]).optional(),special:z.enum(["0","1","2","3","4","5","6","9"])}),totalTaxes:z.object({indicator:z.literal("0")}),issuerMunicipalRegistrationEmission:issuerMunicipalRegistrationEmissionSchema.optional()});
 const storedDpsTaxConfigurationSchema=z.union([dpsTaxConfigurationSchema,z.object({version:z.literal(1),form:z.unknown(),technical:dpsTaxConfigurationSchema.optional()})]);
 export type FiscalResolutionInput={organizationId?:string;municipalityCode:string;nationalTaxCode:string;municipalServiceCode?:string|null;dpsMunicipalTaxCode?:string|null;nbsCode?:string|null;issTaxation?:"1"|"2"|"3"|"4"|null;issRateSource?:IssRateSource|null;fiscalReference?:unknown;taxRegime:"SIMPLES_NACIONAL"|"LUCRO_PRESUMIDO"|"LUCRO_REAL";reviewedAt?:string|null;serviceDate:string;dpsConfiguration:unknown};
-export type FiscalResolution={municipalityCode:string;nationalTaxCode:string;municipalServiceCode?:string;iss:{taxation:"1"|"2"|"3"|"4";rateBasisPoints?:number;rateSource:IssRateSource;withholdingType:"1"|"2"|"3";source:"MUNICIPAL_INTEGRATION"|"ACCEPTED_PRODUCTION_DPS"};retention:{officialRulesChecked:boolean};dpsConfiguration:z.infer<typeof dpsTaxConfigurationSchema>;source:"MUNICIPAL_PARAMETERS"|"ACCEPTED_PRODUCTION_DPS";validity:{validFrom:string;validUntil?:string}};
+export type FiscalResolution={municipalityCode:string;nationalTaxCode:string;municipalServiceCode?:string;iss:{taxation:"1"|"2"|"3"|"4";rateBasisPoints?:number;rateSource:IssRateSource;withholdingType:"1"|"2"|"3";source:"MUNICIPAL_INTEGRATION"|"ACCEPTED_PRODUCTION_DPS"};retention:{officialRulesChecked:boolean};dpsConfiguration:z.infer<typeof dpsTaxConfigurationSchema>;issuerMunicipalRegistrationEmission:"SEND"|"OMIT";source:"MUNICIPAL_PARAMETERS"|"ACCEPTED_PRODUCTION_DPS";validity:{validFrom:string;validUntil?:string}};
 
 export async function resolveFiscalConfiguration(input:FiscalResolutionInput):Promise<FiscalResolution>{
   if(!input.reviewedAt)throw incomplete();
   let dpsConfiguration:z.infer<typeof dpsTaxConfigurationSchema>;
   try{const stored=storedDpsTaxConfigurationSchema.parse(input.dpsConfiguration);dpsConfiguration="version" in stored?(stored.technical??(() => {throw new Error("TECHNICAL_CONFIGURATION_PENDING");})()):stored;}
   catch{throw incomplete();}
+  const issuerMunicipalRegistrationEmission=dpsConfiguration.issuerMunicipalRegistrationEmission?.mode??"SEND";
   const parsedRateSource=issRateSourceSchema.safeParse(input.issRateSource);
   if(!input.issTaxation||!parsedRateSource.success)throw incomplete();
   const issRateSource=parsedRateSource.data;
@@ -24,7 +26,7 @@ export async function resolveFiscalConfiguration(input:FiscalResolutionInput):Pr
     if(!input.dpsMunicipalTaxCode||!matchesAcceptedProductionDpsReference(input.fiscalReference,{nationalTaxCode:input.nationalTaxCode,municipalTaxCode:input.dpsMunicipalTaxCode,nbsCode:input.nbsCode}))throw incomplete();
     const reference=input.fiscalReference as {referenceCompetence:string;issTaxation:string;issWithholding:string};
     if(reference.issTaxation!==input.issTaxation||reference.issWithholding!==dpsConfiguration.iss.withholdingType)throw incomplete();
-    return{municipalityCode:input.municipalityCode,nationalTaxCode:input.nationalTaxCode,iss:{taxation:input.issTaxation,rateSource:issRateSource,withholdingType:dpsConfiguration.iss.withholdingType,source:"ACCEPTED_PRODUCTION_DPS"},retention:{officialRulesChecked:false},dpsConfiguration,source:"ACCEPTED_PRODUCTION_DPS",validity:{validFrom:reference.referenceCompetence}};
+    return{municipalityCode:input.municipalityCode,nationalTaxCode:input.nationalTaxCode,iss:{taxation:input.issTaxation,rateSource:issRateSource,withholdingType:dpsConfiguration.iss.withholdingType,source:"ACCEPTED_PRODUCTION_DPS"},retention:{officialRulesChecked:false},dpsConfiguration,issuerMunicipalRegistrationEmission,source:"ACCEPTED_PRODUCTION_DPS",validity:{validFrom:reference.referenceCompetence}};
   }
   if(!input.municipalServiceCode)throw new SafeFiscalError("FISCAL_SERVICE_MAPPING_MISSING","Uma configuração fiscal desta empresa precisa ser revisada pelo escritório antes da emissão.");
   const serviceCode=parseMunicipalServiceCode(input.municipalServiceCode);
@@ -39,7 +41,7 @@ export async function resolveFiscalConfiguration(input:FiscalResolutionInput):Pr
     ...(dpsConfiguration.iss.benefitNumber?[provider.getBenefit({municipalityCode:input.municipalityCode,benefitNumber:dpsConfiguration.iss.benefitNumber,competence:input.serviceDate})]:[]),
   ]);
   if(rule.incidence!=="SIM"||rule.iss_rate_percent===null)throw incomplete();
-  return{municipalityCode:input.municipalityCode,nationalTaxCode:input.nationalTaxCode,municipalServiceCode:serviceCode,iss:{taxation:input.issTaxation,rateBasisPoints:issPercentToBasisPoints(Number(rule.iss_rate_percent)),rateSource:issRateSource,withholdingType:dpsConfiguration.iss.withholdingType,source:"MUNICIPAL_INTEGRATION"},retention:{officialRulesChecked:true},dpsConfiguration,source:"MUNICIPAL_PARAMETERS",validity:{validFrom:rule.valid_from,...(rule.valid_until?{validUntil:rule.valid_until}:{})}};
+  return{municipalityCode:input.municipalityCode,nationalTaxCode:input.nationalTaxCode,municipalServiceCode:serviceCode,iss:{taxation:input.issTaxation,rateBasisPoints:issPercentToBasisPoints(Number(rule.iss_rate_percent)),rateSource:issRateSource,withholdingType:dpsConfiguration.iss.withholdingType,source:"MUNICIPAL_INTEGRATION"},retention:{officialRulesChecked:true},dpsConfiguration,issuerMunicipalRegistrationEmission,source:"MUNICIPAL_PARAMETERS",validity:{validFrom:rule.valid_from,...(rule.valid_until?{validUntil:rule.valid_until}:{})}};
 }
 
 function incomplete(){return new SafeFiscalError("FISCAL_CONFIGURATION_INCOMPLETE","Uma configuração fiscal desta empresa precisa ser revisada pelo escritório antes da emissão.");}

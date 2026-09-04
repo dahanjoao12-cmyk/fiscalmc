@@ -6,8 +6,19 @@ import { decodeDpsFromSefin,encodeDpsForSefin } from "@/lib/nfse/dps/encoding";
 import { validateDpsXml,validateMinimalXsd,validateXsdRuntimeProbe } from "@/lib/nfse/dps/xsd";
 import { formatDpsDateTimeSaoPaulo } from "@/lib/nfse/dps/date-time";
 import { assertDpsReadiness } from "@/lib/nfse/dps/readiness";
-import { mapToDpsModel } from "@/lib/nfse/dps/model";
+import { mapToDpsModel,type DpsModel } from "@/lib/nfse/dps/model";
 import { buildDpsXml } from "@/lib/nfse/dps/xml";
+import { getOrganizationReadiness } from "@/lib/organizations/readiness";
+
+function modelWithIssuerMunicipalRegistration(emitMunicipalRegistration:boolean):DpsModel{
+  return {
+    id:"DPS330455724024189500017000001000000000000005",environment:"2" as const,emittedAt:"2026-09-02T12:00:00-03:00",applicationVersion:"test",series:"00001",number:5n,competence:"2026-09-02",issuingMunicipalityCode:"3304557",
+    issuer:{taxId:"40241895000170",municipalRegistration:"0.191.068-0",emitMunicipalRegistration,name:"ASSESSORIA CONTABIL MOREIRA & CASTRO",address:{street:"Av. Rio Branco",number:"99",neighborhood:"Centro",postalCode:"20040004",municipalityCode:"3304557",stateOrProvince:"RJ",countryCode:"BR"}},
+    customer:{taxId:"68644533000140",name:"ORLA RIO CONCESSIONARIA LTDA.",address:{street:"Do Joá",number:"3336",neighborhood:"Barra da Tijuca",postalCode:"22610141",municipalityCode:"3304557",stateOrProvince:"RJ",countryCode:"BR"}},
+    service:{location:{municipalityCode:"3304557"},nationalTaxCode:"171901",municipalTaxCode:"001",nbsCode:"113022100",description:"Serviços contábeis - emissão de homologação"},amountCents:10000,
+    fiscal:{regime:{simpleNational:"3",simpleAssessment:"1",special:"0"},iss:{taxation:"1",withholding:"1",rateSource:"PARAMETRIZED_BY_NATIONAL"},totalTaxes:{indicator:"0" as const}},
+  };
+}
 
 const fixturePath=new URL("../../fixtures/dps/minimal-valid-unsigned.xml",import.meta.url);
 async function fixture(){return readFile(fixturePath,"utf8");}
@@ -65,6 +76,25 @@ describe("DPS v1.01",()=>{
     const xml=buildDpsXml(model);
     expect(xml).toContain("<cNBS>113022100</cNBS>");
     expect(xml).not.toContain("<pAliq>");
+  });
+  it("mantém a IM no cadastro pronta mesmo quando a DPS Nacional a omite",()=>{
+    const readiness=getOrganizationReadiness({registration:{municipalRegistration:"0.191.068-0",street:"Av. Rio Branco",addressNumber:"99",neighborhood:"Centro",state:"RJ"},fiscal:{ready:true,message:""},services:{ready:true,message:""},certificate:{ready:true,message:""},clientAccess:{ready:true,message:""}});
+    expect(readiness.items.find(item=>item.key==="registration")?.ready).toBe(true);
+    expect(readiness.overallReady).toBe(true);
+  });
+  it("serializa IM do prestador somente quando a regra é SEND",async()=>{
+    const sent=buildDpsXml(modelWithIssuerMunicipalRegistration(true));
+    const omitted=buildDpsXml(modelWithIssuerMunicipalRegistration(false));
+    expect(sent).toMatch(/<prest>[\s\S]*<IM>0\.191\.068-0<\/IM>/);
+    expect(omitted).not.toMatch(/<prest>[\s\S]*<IM>/);
+    expect(modelWithIssuerMunicipalRegistration(false).issuer.municipalRegistration).toBe("0.191.068-0");
+    await expect(validateDpsXml(sent)).resolves.toMatchObject({valid:true});
+    await expect(validateDpsXml(omitted)).resolves.toMatchObject({valid:true});
+  });
+  it("regrede E0120 omitindo a IM do prestador sem qualquer chamada SEFIN",()=>{
+    const xml=buildDpsXml(modelWithIssuerMunicipalRegistration(false));
+    expect(xml).not.toContain("<prest><CNPJ>40241895000170</CNPJ><IM>");
+    expect(xml).toContain("<prest><CNPJ>40241895000170</CNPJ><xNome>");
   });
   it("bloqueia prontidão DPS sem o código municipal de três dígitos",async()=>await expect(assertDpsReadiness({organization:{legalName:"Prestador",taxId:"12345678000195",municipalRegistration:"123",municipalityCode:"3304557",address:{street:"Rua",number:"1",neighborhood:"Centro",postalCode:"20000000",municipalityCode:"3304557",stateOrProvince:"RJ"}},service:{nationalTaxCode:"070201",municipalTaxCode:"07.02.01.001",locationMunicipalityCode:"3304557"},customer:{name:"Tomador",taxId:"52998224725"},fiscal:{regime:{simpleNational:"1",special:"0"},iss:{taxation:"1",withholding:"1",rateSource:"EMITTER_PROVIDED",rateBasisPoints:500},totalTaxes:{indicator:"0"}},verifyCertificate:false})).rejects.toMatchObject({code:"FISCAL_CONFIGURATION_INCOMPLETE"}));
 });

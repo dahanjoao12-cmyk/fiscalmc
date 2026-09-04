@@ -27,6 +27,19 @@ describe("fiscal configuration readiness",()=>{
     expect(readiness.technical).toEqual({opSimpNac:"3",regApTribSN:"2",regEspTrib:"6",issWithholdingType:"1"});
     expect(readiness.missing).toEqual([]);
   });
+  it("preserva a regra auditável de omitir IM somente na DPS Nacional",()=>{
+    const form={taxRegime:"SIMPLES_NACIONAL" as const,simplesNational:"CONFIGURED" as const,mei:"NOT_APPLICABLE" as const,issConfiguration:"CONFIGURED" as const,issWithholding:"CONFIGURED" as const,specialRegime:"CONFIGURED" as const,ibsCbs:"NOT_APPLICABLE" as const};
+    const configuration={version:1 as const,form,technical:{iss:{withholdingType:"1" as const},regime:{simpleNational:"3" as const,simpleAssessment:"1" as const,special:"0" as const},totalTaxes:{indicator:"0" as const},issuerMunicipalRegistrationEmission:{mode:"OMIT" as const,source:"SEFIN_REJECTION" as const,referenceDps:"4",referenceCode:"E0120",environment:"PRODUCTION_RESTRICTED" as const}}};
+    const readiness=getFiscalConfigurationReadiness({tax_regime:"SIMPLES_NACIONAL",dps_configuration:configuration,reviewed_at:"2026-09-04T00:00:00.000Z",reviewed_by:"office"});
+    expect(readiness.status).toBe("REVIEWED");
+    expect(readiness.technical).toMatchObject({issuerMunicipalRegistrationEmission:{mode:"OMIT",source:"SEFIN_REJECTION",referenceDps:"4",referenceCode:"E0120",environment:"PRODUCTION_RESTRICTED"}});
+  });
+  it("não apaga a regra de emissão da IM ao atualizar os demais campos técnicos",()=>{
+    const form={taxRegime:"SIMPLES_NACIONAL" as const,simplesNational:"CONFIGURED" as const,mei:"NOT_APPLICABLE" as const,issConfiguration:"CONFIGURED" as const,issWithholding:"CONFIGURED" as const,specialRegime:"CONFIGURED" as const,ibsCbs:"NOT_APPLICABLE" as const};
+    const existing={version:1 as const,form,technical:{iss:{withholdingType:"1" as const},regime:{simpleNational:"3" as const,simpleAssessment:"1" as const,special:"0" as const},totalTaxes:{indicator:"0" as const},issuerMunicipalRegistrationEmission:{mode:"OMIT" as const,source:"SEFIN_REJECTION" as const,referenceDps:"4",referenceCode:"E0120",environment:"PRODUCTION_RESTRICTED" as const}}};
+    const updated=normalizeFiscalConfiguration(form,existing,{opSimpNac:"3",regApTribSN:"1",regEspTrib:"0",issWithholdingType:"1"});
+    expect(getFiscalConfigurationReadiness({tax_regime:"SIMPLES_NACIONAL",dps_configuration:updated,reviewed_at:null,reviewed_by:null}).technical).toMatchObject({issuerMunicipalRegistrationEmission:{mode:"OMIT",referenceCode:"E0120"}});
+  });
   it("reconhece estrutura inválida sem assumir valores",()=>{
     const readiness=getFiscalConfigurationReadiness({tax_regime:"LUCRO_REAL",dps_configuration:{unknown:true},reviewed_at:null,reviewed_by:null});
     expect(readiness.status).toBe("INVALID");

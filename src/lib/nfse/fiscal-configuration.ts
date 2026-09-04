@@ -2,6 +2,13 @@ import { z } from "zod";
 
 export const administrativeRegimeSchema=z.enum(["SIMPLES_NACIONAL","LUCRO_PRESUMIDO","LUCRO_REAL"]);
 export const reviewValueSchema=z.enum(["CONFIGURED","PENDING_REVIEW","NOT_APPLICABLE"]);
+export const issuerMunicipalRegistrationEmissionSchema=z.object({
+  mode:z.enum(["SEND","OMIT"]),
+  source:z.literal("SEFIN_REJECTION"),
+  referenceDps:z.string().trim().min(1).max(40),
+  referenceCode:z.string().trim().min(1).max(40),
+  environment:z.literal("PRODUCTION_RESTRICTED"),
+}).strict();
 export const fiscalConfigurationFormSchema=z.object({
   taxRegime:administrativeRegimeSchema.nullable(),
   simplesNational:reviewValueSchema,
@@ -17,7 +24,8 @@ export const fiscalTechnicalConfigurationSchema=z.object({
   opSimpNac:z.enum(["1","2","3"]),
   regApTribSN:z.enum(["1","2","3"]).nullable(),
   regEspTrib:z.enum(["0","1","2","3","4","5","6","9"]),
-  issWithholdingType:z.enum(["1","2","3"])
+  issWithholdingType:z.enum(["1","2","3"]),
+  issuerMunicipalRegistrationEmission:issuerMunicipalRegistrationEmissionSchema.optional(),
 });
 export type FiscalTechnicalConfiguration=z.infer<typeof fiscalTechnicalConfigurationSchema>;
 type StoredConfiguration={version:1;form:FiscalConfigurationForm;technical?:unknown};
@@ -35,10 +43,12 @@ export function readFiscalConfiguration(value:unknown):FiscalConfigurationForm{
 
 export function normalizeFiscalConfiguration(form:FiscalConfigurationForm,existing:unknown,technicalInput?:FiscalTechnicalConfiguration){
   const prior=storedConfiguration(existing);
+  const priorTechnical=z.object({issuerMunicipalRegistrationEmission:issuerMunicipalRegistrationEmissionSchema.optional()}).safeParse(prior?.technical).data;
   const technical=technicalInput?{
     iss:{withholdingType:technicalInput.issWithholdingType},
     regime:{simpleNational:technicalInput.opSimpNac,...(technicalInput.regApTribSN?{simpleAssessment:technicalInput.regApTribSN}:{}) ,special:technicalInput.regEspTrib},
-    totalTaxes:{indicator:"0" as const}
+    totalTaxes:{indicator:"0" as const},
+    ...(priorTechnical?.issuerMunicipalRegistrationEmission?{issuerMunicipalRegistrationEmission:priorTechnical.issuerMunicipalRegistrationEmission}:{}),
   }:prior?.technical??(isLegacyTechnicalConfiguration(existing)?existing:undefined);
   return {version:1 as const,form,...(technical===undefined?{}:{technical})};
 }
@@ -62,12 +72,13 @@ export function getFiscalConfigurationReadiness(profile:{tax_regime:string|null;
   if(form.ibsCbs==="PENDING_REVIEW")missing.push("IBS/CBS");
   const status: FiscalConfigurationStatus=missing.length?"PENDING_REVIEW":profile.reviewed_at?"REVIEWED":"PENDING_REVIEW";
   const technical=parsed.data.technical;
-  const technicalRecord=technical as {regime?:{simpleNational?:unknown;simpleAssessment?:unknown;special?:unknown};iss?:{withholdingType?:unknown}}|undefined;
+  const technicalRecord=technical as {regime?:{simpleNational?:unknown;simpleAssessment?:unknown;special?:unknown};iss?:{withholdingType?:unknown};issuerMunicipalRegistrationEmission?:unknown}|undefined;
   const technicalForm=fiscalTechnicalConfigurationSchema.safeParse({
     opSimpNac:technicalRecord?.regime?.simpleNational,
     regApTribSN:technicalRecord?.regime?.simpleAssessment??null,
     regEspTrib:technicalRecord?.regime?.special,
-    issWithholdingType:technicalRecord?.iss?.withholdingType
+    issWithholdingType:technicalRecord?.iss?.withholdingType,
+    issuerMunicipalRegistrationEmission:technicalRecord?.issuerMunicipalRegistrationEmission,
   });
   return {status,missing,form,technical:technicalForm.success?technicalForm.data:null,reviewedAt:profile.reviewed_at,reviewedBy:profile.reviewed_by};
 }

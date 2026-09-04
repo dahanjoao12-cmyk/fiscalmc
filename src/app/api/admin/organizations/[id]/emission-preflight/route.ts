@@ -142,6 +142,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
         totalTaxes: fiscal.dpsConfiguration.totalTaxes,
       },
+      issuerMunicipalRegistrationEmission: fiscal.issuerMunicipalRegistrationEmission,
       onStage: (nextStage) => { stage = nextStage; },
     });
     stage = "PAYLOAD_ASSERTION";
