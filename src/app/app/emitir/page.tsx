@@ -50,7 +50,7 @@ export default async function IssuePage() {
         title="Emitir NFS-e"
         description="Preencha os dados da operação. A configuração fiscal permanece protegida no backend."
       />
-      <IssueForm customers={customers} services={services} mock={demoMock} />
+      <IssueForm customers={customers} services={services} mock={demoMock} requiresProductionConfirmation={process.env.NFSE_ENV?.toLowerCase() === "production"} />
     </div>
   );
 }

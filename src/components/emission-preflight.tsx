@@ -6,7 +6,7 @@ import { CheckCircle2, LoaderCircle, ShieldCheck, XCircle } from "lucide-react";
 type PreflightResult = {
   readiness: { registration: boolean; fiscal: boolean; service: boolean; certificate: boolean; clientAccess: boolean; organization: boolean };
   validation: { dpsBuilt: boolean; dynamicRules: boolean; unsignedXsd: boolean; xmldsig: boolean; signatureVerification: boolean; signedXsd: boolean; gzipBase64: boolean; payload: boolean; businessRules: boolean; pAliqEmitted: boolean };
-  target: { environment: string };
+  target: { environment: string; endpoint?: string; productionSequence?: { exists: boolean; series: string; nextNumber: number; provisionedOnFirstAuthorizedReservation?: boolean } };
   transmissionAttempted: boolean;
   sequenceConsumed: boolean;
   invoiceCreated: boolean;
@@ -49,6 +49,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
     amount: "",
     competence: "",
     description: "",
+    targetEnvironment: "PRODUCTION_RESTRICTED",
   });
 
   function updateField(field: keyof typeof operation, value: string) {
@@ -85,6 +86,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
           amountCents: Math.round(Number(amount) * 100),
           competence: operation.competence,
           description: operation.description,
+          targetEnvironment: operation.targetEnvironment,
         }),
       });
       const data = await response.json().catch(() => null);
@@ -126,6 +128,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
       <label>UF<input value={operation.state} onChange={(event) => updateField("state", event.target.value.toUpperCase())} maxLength={2} required /></label>
       <label>Valor (R$)<input value={operation.amount} onChange={(event) => updateField("amount", event.target.value)} inputMode="decimal" placeholder="0,00" required /></label>
       <label>Competência<input value={operation.competence} onChange={(event) => updateField("competence", event.target.value)} type="date" required /></label>
+      <label>Ambiente de pré-validação<select value={operation.targetEnvironment} onChange={(event) => updateField("targetEnvironment", event.target.value)}><option value="PRODUCTION_RESTRICTED">Produção Restrita</option><option value="PRODUCTION">Produção (somente leitura)</option></select></label>
       <label className="full">Descrição<textarea value={operation.description} onChange={(event) => updateField("description", event.target.value)} rows={3} required /></label>
       <div className="full emission-preflight-actions"><button className="button secondary" type="submit" disabled={running}>
         {running ? <><LoaderCircle className="spin" size={17} />Pré-validando…</> : "Pré-validar emissão"}
@@ -138,7 +141,8 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
         <div>{readinessLabels.map(([key, label]) => <StatusLine key={key} label={label} passed={result.readiness[key]} />)}</div>
         <div>{validationLabels.map(([key, label]) => <StatusLine key={key} label={label} passed={result.validation[key]} />)}</div>
       </div>
-      <p>Ambiente alvo: <strong>Produção Restrita</strong></p>
+      <p>Ambiente alvo: <strong>{result.target.environment === "PRODUCTION" ? "Produção — pré-validação somente leitura" : "Produção Restrita"}</strong></p>
+      {result.target.productionSequence ? <p>Sequência de Produção: <strong>{result.target.productionSequence.exists ? `${result.target.productionSequence.series}/${result.target.productionSequence.nextNumber}` : "será criada apenas na primeira reserva autorizada"}</strong></p> : null}
       <p>Alíquota na DPS: <strong>{result.validation.pAliqEmitted ? "informada" : "não informada"}</strong></p>
       <p>Transmissão: <strong>NÃO EXECUTADA</strong></p>
     </div> : null}

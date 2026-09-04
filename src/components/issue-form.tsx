@@ -7,11 +7,11 @@ import { getInvoicePresentation } from "@/lib/invoices/presentation";
 
 export type IssueCustomer = { id: string; legalName: string; taxId?: string | null };
 export type IssueService = { id: string; name: string; defaultDescription?: string | null };
-type Props = { customers: IssueCustomer[]; services: IssueService[]; mock?: boolean; issuanceOrganizationId?: string };
+type Props = { customers: IssueCustomer[]; services: IssueService[]; mock?: boolean; issuanceOrganizationId?: string; requiresProductionConfirmation?: boolean };
 type Result = { status: "ISSUED" | "REJECTED" | "UNKNOWN"; invoiceId?: string; safeMessage: string };
 const steps = ["Tomador", "Serviço", "Valores", "Revisão", "Emitir"];
 
-export function IssueForm({ customers, services, mock = false, issuanceOrganizationId }: Props) {
+export function IssueForm({ customers, services, mock = false, issuanceOrganizationId, requiresProductionConfirmation = false }: Props) {
   const [selectedCustomerId, setCustomerId] = useState(customers[0]?.id ?? "");
   const [selectedServiceTemplateId, setServiceId] = useState(services[0]?.id ?? "");
   const [amount, setAmount] = useState("");
@@ -22,6 +22,7 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [productionConfirmed, setProductionConfirmed] = useState(false);
   const customer = customers.find((item) => item.id === selectedCustomerId);
   const service = services.find((item) => item.id === selectedServiceTemplateId);
   const canPreview = Boolean(customer && service && amount && description.trim().length >= 3 && date);
@@ -32,7 +33,7 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
     if (!preview) return;
     setSubmitting(true);
     try {
-      const response = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ ...(issuanceOrganizationId ? { organizationId: issuanceOrganizationId } : {}), customerId: selectedCustomerId, serviceTemplateId: selectedServiceTemplateId, amount: amount.replace(/\./g, "").replace(",", "."), serviceDate: date, description, ...(mock ? { scenario: "success" } : {}) }) });
+      const response = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ ...(issuanceOrganizationId ? { organizationId: issuanceOrganizationId } : {}), customerId: selectedCustomerId, serviceTemplateId: selectedServiceTemplateId, amount: amount.replace(/\./g, "").replace(",", "."), serviceDate: date, description, ...(requiresProductionConfirmation ? { productionConfirmation: productionConfirmed } : {}), ...(mock ? { scenario: "success" } : {}) }) });
       const payload = await response.json() as Result & { error?: string };
       if (payload.status === "REJECTED" || payload.status === "UNKNOWN" || payload.status === "ISSUED") {
         setResult(payload);
@@ -68,7 +69,8 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
         <section className="v2-form-section"><div className="v2-form-section-heading"><span>3</span><div><h2>Valores</h2><p>Informe a competência e o valor total do serviço.</p></div></div>
           <div className="v2-form-grid"><label className="field"><span>Data da prestação</span><input className="input" id="date" type="date" value={date} onChange={(event) => changed(() => setDate(event.target.value))} /></label><label className="field"><span>Valor total</span><div className="money-input"><span>R$</span><input className="input" id="amount" inputMode="decimal" value={amount} placeholder="0,00" onChange={(event) => changed(() => setAmount(event.target.value))} /></div></label></div>
         </section>
-        <div className="v2-issue-actions"><button className="button secondary" type="button" disabled={!canPreview || submitting} onClick={() => setPreview(true)}><Eye size={18} />Revisar emissão</button><button className="button primary" type="button" disabled={!preview || submitting || !customers.length} onClick={issue}>{submitting ? <><LoaderCircle className="spin" size={18} />Emitindo…</> : <><Send size={18} />Emitir NFS-e</>}</button></div>
+        {requiresProductionConfirmation ? <section className="alert warning" aria-label="Confirmação de Produção"><strong>AMBIENTE: PRODUÇÃO</strong><p>Esta NFS-e terá validade fiscal.</p><label><input type="checkbox" checked={productionConfirmed} onChange={(event) => setProductionConfirmed(event.target.checked)} /> Confirmo a revisão desta operação e autorizo a emissão em Produção.</label></section> : null}
+        <div className="v2-issue-actions"><button className="button secondary" type="button" disabled={!canPreview || submitting} onClick={() => setPreview(true)}><Eye size={18} />Revisar emissão</button><button className="button primary" type="button" disabled={!preview || submitting || !customers.length || (requiresProductionConfirmation && !productionConfirmed)} onClick={issue}>{submitting ? <><LoaderCircle className="spin" size={18} />Emitindo…</> : <><Send size={18} />Emitir NFS-e</>}</button></div>
       </form>
       <aside className="v2-issue-summary"><div className="v2-panel-heading"><div><h2>Resumo da emissão</h2><p>Confira os dados antes de emitir.</p></div></div><dl>
         <div><dt>Tomador</dt><dd>{customer?.legalName ?? "Selecione um tomador"}</dd></div>

@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { SafeFiscalError } from "../errors";
+import type { NFSeEnvironment } from "../types";
 
 type AuthenticatedReservationClient = {
   rpc: (functionName: "reserve_dps_number", args: {
     target_org: string;
-    target_env: "PRODUCTION_RESTRICTED";
+    target_env: NFSeEnvironment;
     target_series: string;
   }) => PromiseLike<{ data: unknown; error: unknown }>;
 };
@@ -17,11 +18,11 @@ const dpsNumberSchema = z.number().int().positive();
  */
 export async function reserveDpsNumber(
   client: AuthenticatedReservationClient,
-  input: { organizationId: string; series: string },
+  input: { organizationId: string; series: string; environment?: NFSeEnvironment },
 ) {
   const reservation = await client.rpc("reserve_dps_number", {
     target_org: input.organizationId,
-    target_env: "PRODUCTION_RESTRICTED",
+    target_env: input.environment ?? "PRODUCTION_RESTRICTED",
     target_series: input.series,
   });
   const number = dpsNumberSchema.safeParse(reservation.data);

@@ -25,3 +25,13 @@ export function assertRestrictedEmissionReady(input:RestrictedEmissionReadiness)
   }
   return{environment:"PRODUCTION_RESTRICTED" as const,productionBlocked:true};
 }
+
+/** Final fail-closed gate for either supported National environment. */
+export function assertNationalEmissionReady(input:RestrictedEmissionReadiness){
+  if(input.environment?.toLowerCase()!=="production")return assertRestrictedEmissionReady(input);
+  const onboardingReady=input.registrationReady&&input.fiscalReady&&input.serviceReady&&input.certificateReady&&input.clientAccessReady;
+  if(!onboardingReady||input.organizationStatus!=="ACTIVE"||input.emissionBlocked||input.provider!=="national"||input.productionEnabled!=="true"){
+    throw new SafeFiscalError("PRODUCTION_TRANSMISSION_NOT_AUTHORIZED","A transmissão em Produção ainda não foi autorizada para esta empresa.");
+  }
+  return{environment:"PRODUCTION" as const,productionBlocked:false};
+}

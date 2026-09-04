@@ -13,7 +13,14 @@ const rejectionSchema=z.object({erros:z.array(z.object({Codigo:z.string().option
 function findScalar(value:unknown,key:string):string|undefined{if(!value||typeof value!=="object")return undefined;for(const[k,v]of Object.entries(value)){if(k===key&&(typeof v==="string"||typeof v==="number"))return String(v);const nested=findScalar(v,key);if(nested)return nested;}return undefined;}
 
 function assertTransportAuthorized(){
-  if(getNFSeEnvironment()!=="PRODUCTION_RESTRICTED"||process.env.NFSE_PROVIDER!=="national"||process.env.ENABLE_NFSE_PRODUCTION==="true"||process.env.ENABLE_NFSE_RESTRICTED_TRANSMISSION!=="true")throw new SafeFiscalError("RESTRICTED_TRANSMISSION_NOT_AUTHORIZED","A primeira transmissão em Produção Restrita ainda não foi autorizada.");
+  const environment=getNFSeEnvironment();
+  if(process.env.NFSE_PROVIDER!=="national")throw new SafeFiscalError("NATIONAL_TRANSMISSION_NOT_AUTHORIZED","A transmissão nacional ainda não foi autorizada.");
+  if(environment==="PRODUCTION"){
+    if(process.env.ENABLE_NFSE_PRODUCTION!=="true")throw new SafeFiscalError("PRODUCTION_TRANSMISSION_NOT_AUTHORIZED","A transmissão em Produção ainda não foi autorizada.");
+    return environment;
+  }
+  if(process.env.ENABLE_NFSE_PRODUCTION==="true"||process.env.ENABLE_NFSE_RESTRICTED_TRANSMISSION!=="true")throw new SafeFiscalError("RESTRICTED_TRANSMISSION_NOT_AUTHORIZED","A primeira transmissão em Produção Restrita ainda não foi autorizada.");
+  return environment;
 }
 
 /**
@@ -24,9 +31,9 @@ export class NationalNFSeProvider implements NFSeProvider {
   constructor(private readonly http=new MtlsHttpClient(new OrganizationCertificateProvider())){}
   buildRequest(signedDpsXml:string):SefinDpsRequest{return buildSefinDpsRequest(signedDpsXml);}
   async issue(input: IssueRequest): Promise<IssueResult> {
-    assertTransportAuthorized();
+    const environment=assertTransportAuthorized();
     if(!input.organizationId||!input.preparedPayload)throw new SafeFiscalError("FISCAL_CONFIGURATION_INCOMPLETE","A DPS ainda não está pronta para transmissão.");
-    const response=await this.http.postJsonTracked(`${endpoints.PRODUCTION_RESTRICTED}/nfse`,input.preparedPayload,input.organizationId);
+    const response=await this.http.postJsonTracked(`${endpoints[environment]}/nfse`,input.preparedPayload,input.organizationId);
     if(response.status===201){
       const parsed=successSchema.safeParse(response.body);
       if(!parsed.success)throw new MtlsRequestError("Resposta de emissão inválida.","POSSIBLY_SENT","INVALID_API_RESPONSE");

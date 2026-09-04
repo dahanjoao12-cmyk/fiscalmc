@@ -14,18 +14,19 @@ import { getServiceReadiness } from "@/lib/nfse/service-readiness";
 import { getFiscalConfigurationReadiness } from "@/lib/nfse/fiscal-configuration";
 import { getCertificateReadiness } from "@/lib/nfse/certificate/status";
 import { getOrganizationReadiness } from "@/lib/organizations/readiness";
-import { assertRestrictedEmissionReady } from "@/lib/nfse/issuance/restricted-readiness";
+import { assertNationalEmissionReady } from "@/lib/nfse/issuance/restricted-readiness";
 import { prepareRestrictedDps } from "@/lib/nfse/issuance/prepare-restricted-dps";
 import { createSupabaseInvoiceSubmissionGateway,submitInvoiceSafely } from "@/lib/nfse/issuance/submission-service";
 import { decideIdempotencyReplay,UNKNOWN_CLIENT_MESSAGE } from "@/lib/nfse/issuance/state-machine";
 import { reconcileUnknownInvoice } from "@/lib/nfse/reconciliation/service";
 import { reserveDpsNumber } from "@/lib/nfse/issuance/dps-reservation";
 import { issuanceFailureDiagnostic, type IssuanceStage } from "@/lib/nfse/issuance/request-diagnostics";
+import { getConfiguredNFSeEnvironment } from "@/lib/nfse/environments";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 
-const schema=z.object({organizationId:z.uuid().optional(),serviceTemplateId:z.uuid(),customerId:z.uuid(),amount:z.union([z.string(),z.number()]),serviceDate:z.iso.date(),description:z.string().trim().min(3).max(1000),scenario:z.enum(["success","rejection","timeout"]).optional()});
+const schema=z.object({organizationId:z.uuid().optional(),serviceTemplateId:z.uuid(),customerId:z.uuid(),amount:z.union([z.string(),z.number()]),serviceDate:z.iso.date(),description:z.string().trim().min(3).max(1000),productionConfirmation:z.boolean().optional(),scenario:z.enum(["success","rejection","timeout"]).optional()});
 const idempotencySchema=z.uuid();
 type Input=z.infer<typeof schema>;
 
@@ -44,6 +45,9 @@ export async function POST(request:Request){
   try{
     assertRateLimit(`issue:${request.headers.get("x-forwarded-for")??"local"}`);
     const requested=schema.parse(await request.json());
+    if (getConfiguredNFSeEnvironment() === "PRODUCTION" && requested.productionConfirmation !== true) {
+      throw new SafeFiscalError("PRODUCTION_CONFIRMATION_REQUIRED", "Confirme explicitamente a emissão em Produção antes de transmitir.");
+    }
     if(process.env.NFSE_PROVIDER!=="national"&&!process.env.NEXT_PUBLIC_SUPABASE_URL){
       const document=buildFiscalDocument({organization:{id:"local-mock",taxId:"00000000000000",municipalRegistration:"ISENTO",municipalityCode:"0000000"},customer:{legalName:"Tomador de demonstração"},service:{nationalTaxCode:"000000"},taxConfiguration:{regime:"SIMPLES_NACIONAL",taxationType:"MUNICIPAL",iss:{withheld:false,source:"OFFICE_PARAMETER"},ibsCbs:{customerFieldsEnabled:false}},amountCents:parseMoneyToCents(requested.amount),serviceDate:requested.serviceDate,description:requested.description,dpsNumber:1n,dpsSeries:"00001"});
       const result=await getNFSeProvider().issue({document,idempotencyKey,scenario:requested.scenario});
@@ -79,18 +83,19 @@ export async function POST(request:Request){
     const fiscalReadiness=getFiscalConfigurationReadiness(profile);
     const certificateReadiness=getCertificateReadiness({certificate,organizationTaxId:organization.tax_id});
     const organizationReadiness=getOrganizationReadiness({registration:{municipalRegistration:organization.municipal_registration,street:organization.street,addressNumber:organization.address_number,neighborhood:organization.neighborhood,state:organization.state},fiscal:{ready:fiscalReadiness.status==="REVIEWED",message:""},services:{ready:serviceReadiness.ready,message:""},certificate:{ready:certificateReadiness.ready,message:""},clientAccess:{ready:Boolean(clientAccess?.enabled),message:""}});
-    if(process.env.NFSE_PROVIDER==="national")assertRestrictedEmissionReady({registrationReady:organizationReadiness.items.find(x=>x.key==="registration")?.ready??false,fiscalReady:fiscalReadiness.status==="REVIEWED",serviceReady:serviceReadiness.ready,certificateReady:certificateReadiness.ready,clientAccessReady:Boolean(clientAccess?.enabled),organizationStatus:organization.status,emissionBlocked:organization.emission_blocked,environment:process.env.NFSE_ENV,provider:process.env.NFSE_PROVIDER,productionEnabled:process.env.ENABLE_NFSE_PRODUCTION,restrictedTransmissionEnabled:process.env.ENABLE_NFSE_RESTRICTED_TRANSMISSION});
+    const nationalEnvironment=process.env.NFSE_PROVIDER==="national"?assertNationalEmissionReady({registrationReady:organizationReadiness.items.find(x=>x.key==="registration")?.ready??false,fiscalReady:fiscalReadiness.status==="REVIEWED",serviceReady:serviceReadiness.ready,certificateReady:certificateReadiness.ready,clientAccessReady:Boolean(clientAccess?.enabled),organizationStatus:organization.status,emissionBlocked:organization.emission_blocked,environment:process.env.NFSE_ENV,provider:process.env.NFSE_PROVIDER,productionEnabled:process.env.ENABLE_NFSE_PRODUCTION,restrictedTransmissionEnabled:process.env.ENABLE_NFSE_RESTRICTED_TRANSMISSION}):undefined;
+    const invoiceEnvironment=nationalEnvironment?.environment??"PRODUCTION_RESTRICTED";
 
     stage="FISCAL_RESOLUTION";
     const fiscal=await resolveFiscalConfiguration({organizationId:session.organizationId,municipalityCode:organization.municipality_code,nationalTaxCode:service.national_tax_code,municipalServiceCode:service.municipal_service_code,dpsMunicipalTaxCode:service.dps_municipal_tax_code,nbsCode:service.nbs_code,issTaxation:service.iss_taxation,issRateSource:service.iss_rate_source,fiscalReference:service.fiscal_reference,taxRegime:profile.tax_regime,reviewedAt:profile.reviewed_at,serviceDate:effective.serviceDate,dpsConfiguration:profile.dps_configuration});
     let invoice=existing;
     let dpsNumber=existing?.dps_number;
-    if(!invoice){stage="RESERVE_DPS";dpsNumber=await reserveDpsNumber(authenticatedClient,{organizationId:session.organizationId,series:"00001"});}
+    if(!invoice){stage="RESERVE_DPS";dpsNumber=await reserveDpsNumber(authenticatedClient,{organizationId:session.organizationId,series:"00001",environment:invoiceEnvironment});}
     stage="BUILD_DOCUMENT";
     const document=buildFiscalDocument({organization:{id:organization.id,taxId:organization.tax_id,municipalRegistration:organization.municipal_registration??"",municipalityCode:organization.municipality_code},customer:{taxId:customer.tax_id,legalName:customer.legal_name},service:{nationalTaxCode:service.national_tax_code,municipalServiceCode:fiscal.municipalServiceCode},taxConfiguration:{regime:profile.tax_regime,taxationType:"MUNICIPAL",iss:{rateBasisPoints:fiscal.iss.rateBasisPoints,withheld:fiscal.iss.withholdingType!=="1",source:fiscal.iss.source},ibsCbs:{customerFieldsEnabled:false}},amountCents:parseMoneyToCents(effective.amount),serviceDate:effective.serviceDate,description:effective.description,dpsNumber:BigInt(dpsNumber),dpsSeries:existing?.dps_series??"00001"});
     if(!invoice){
       stage="INVOICE_INSERT";
-      const inserted=await admin.from("invoices").insert({organization_id:session.organizationId,customer_id:customer.id,service_template_id:service.id,amount_cents:document.amountCents,service_date:effective.serviceDate,description:effective.description,status:"READY",idempotency_key:idempotencyKey,dps_series:"00001",dps_number:dpsNumber,dps_identifier:document.dps.identifier,environment:"PRODUCTION_RESTRICTED",created_by:session.actorUserId}).select("id,status,dps_identifier").single();
+      const inserted=await admin.from("invoices").insert({organization_id:session.organizationId,customer_id:customer.id,service_template_id:service.id,amount_cents:document.amountCents,service_date:effective.serviceDate,description:effective.description,status:"READY",idempotency_key:idempotencyKey,dps_series:"00001",dps_number:dpsNumber,dps_identifier:document.dps.identifier,environment:invoiceEnvironment,created_by:session.actorUserId}).select("id,status,dps_identifier").single();
       if(inserted.error||!inserted.data){
         if(inserted.error)logEvent("error","INVOICE_INSERT_FAILED",{requestId,...issuanceFailureDiagnostic(stage,inserted.error)});
         const replay=await admin.from("invoices").select("id,status,access_key,nfse_number,safe_status_message").eq("organization_id",session.organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();if(replay.data)return responseForStored(replay.data,requestId);throw new Error("INVOICE_PERSIST_FAILED");
@@ -104,7 +109,7 @@ export async function POST(request:Request){
     const attemptRequestId=crypto.randomUUID();
     logEvent("info","INVOICE_REQUESTED",{requestId,organizationId:session.organizationId,idempotencyKey});
     stage="CLAIM_SUBMISSION";
-    const submission=await submitInvoiceSafely({gateway:createSupabaseInvoiceSubmissionGateway(),invoiceId:invoice.id,organizationId:session.organizationId,requestId:attemptRequestId,dpsIdentifier:document.dps.identifier,execute:async()=>{
+    const submission=await submitInvoiceSafely({gateway:createSupabaseInvoiceSubmissionGateway(invoiceEnvironment),invoiceId:invoice.id,organizationId:session.organizationId,requestId:attemptRequestId,dpsIdentifier:document.dps.identifier,execute:async()=>{
       if(process.env.NFSE_PROVIDER!=="national")return getNFSeProvider().issue({document,idempotencyKey,scenario:effective.scenario});
       const fiscalForDps={regime:fiscal.dpsConfiguration.regime,iss:{taxation:fiscal.iss.taxation,withholding:fiscal.iss.withholdingType,rateSource:fiscal.iss.rateSource,...(fiscal.iss.rateBasisPoints!==undefined?{rateBasisPoints:fiscal.iss.rateBasisPoints}:{}),...(fiscal.dpsConfiguration.iss.benefitNumber?{benefit:{number:fiscal.dpsConfiguration.iss.benefitNumber}}:{})},totalTaxes:fiscal.dpsConfiguration.totalTaxes};
       stage="PREPARE_DPS";

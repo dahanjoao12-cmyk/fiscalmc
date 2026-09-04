@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { InvoiceStatus,IssueResult } from "../types";
+import type { InvoiceStatus,IssueResult,NFSeEnvironment } from "../types";
 import { decideIdempotencyReplay,finalizationFromError,finalizationFromResult,type SubmissionFinalization } from "./state-machine";
 
 export type SubmissionClaim={claimed:boolean;currentStatus:InvoiceStatus};
@@ -33,11 +33,11 @@ export async function submitInvoiceSafely(input:{gateway:InvoiceSubmissionGatewa
 
 const claimRowSchema=z.object({claimed:z.boolean(),current_status:z.enum(["DRAFT","READY","SUBMITTING","ISSUED","REJECTED","UNKNOWN","CANCELLED"])});
 
-export function createSupabaseInvoiceSubmissionGateway():InvoiceSubmissionGateway{
+export function createSupabaseInvoiceSubmissionGateway(environment:NFSeEnvironment="PRODUCTION_RESTRICTED"):InvoiceSubmissionGateway{
   const db=createAdminClient();
   return{
     async claim(input){
-      const{data,error}=await db.rpc("claim_invoice_submission",{p_invoice_id:input.invoiceId,p_organization_id:input.organizationId,p_request_id:input.requestId,p_environment:"PRODUCTION_RESTRICTED"});
+      const{data,error}=await db.rpc("claim_invoice_submission",{p_invoice_id:input.invoiceId,p_organization_id:input.organizationId,p_request_id:input.requestId,p_environment:environment});
       if(error)throw new Error("INVOICE_SUBMISSION_CLAIM_FAILED");
       const row=claimRowSchema.parse(Array.isArray(data)?data[0]:data);
       return{claimed:row.claimed,currentStatus:row.current_status};

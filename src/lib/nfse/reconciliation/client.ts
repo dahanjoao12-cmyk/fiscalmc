@@ -4,8 +4,9 @@ import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { OrganizationCertificateProvider } from "../certificate/organization-provider";
 import { MtlsHttpClient } from "../client/mtls-http-client";
-import { endpoints } from "../environments";
+import { danfseEndpoints,endpoints } from "../environments";
 import { SafeFiscalError } from "../errors";
+import type { NFSeEnvironment } from "../types";
 
 const dpsResponseSchema=z.union([
   z.object({chaveAcesso:z.string().regex(/^\d{50}$/)}).passthrough(),
@@ -40,9 +41,9 @@ function findScalar(value:unknown,key:string):string|undefined{
 
 /** Official read-only reconciliation client. It never exposes a local-certificate fallback. */
 export class SefinRestrictedReconciliationClient implements UnknownInvoiceLookup{
-  constructor(private readonly http=new MtlsHttpClient(new OrganizationCertificateProvider())){}
+  constructor(private readonly http=new MtlsHttpClient(new OrganizationCertificateProvider()),private readonly environment:NFSeEnvironment="PRODUCTION_RESTRICTED"){}
   async findByDps(input:{organizationId:string;dpsIdentifier:string}):Promise<OfficialReconciliationResult>{
-    const dpsUrl=`${endpoints.PRODUCTION_RESTRICTED}/dps/${encodeURIComponent(input.dpsIdentifier)}`;
+    const dpsUrl=`${endpoints[this.environment]}/dps/${encodeURIComponent(input.dpsIdentifier)}`;
     const dpsResponse=await this.http.requestText({url:dpsUrl,organizationId:input.organizationId});
     if(dpsResponse.status===404)return{status:"UNKNOWN"};
     if(dpsResponse.status!==200)throw new SafeFiscalError("RECONCILIATION_UNAVAILABLE","Não foi possível confirmar a situação desta nota.",true);
@@ -57,7 +58,7 @@ export class SefinRestrictedReconciliationClient implements UnknownInvoiceLookup
 
   /** Reads a previously issued NFS-e from Produção Restrita. It never transmits a DPS. */
   async getNfseByAccessKey(input:{organizationId:string;accessKey:string}):Promise<OfficialNfseDocument|null>{
-    const nfseUrl=`${endpoints.PRODUCTION_RESTRICTED}/nfse/${encodeURIComponent(input.accessKey)}`;
+    const nfseUrl=`${endpoints[this.environment]}/nfse/${encodeURIComponent(input.accessKey)}`;
     const nfseResponse=await this.http.requestText({url:nfseUrl,organizationId:input.organizationId});
     if(nfseResponse.status===404)return null;
     if(nfseResponse.status!==200)throw new SafeFiscalError("RECONCILIATION_UNAVAILABLE","Não foi possível confirmar a situação desta nota.",true);
@@ -73,7 +74,7 @@ export class SefinRestrictedReconciliationClient implements UnknownInvoiceLookup
 
   /** Retrieves only the official PDF; a 404 means DANFSe is not available yet. */
   async getDanfseByAccessKey(input:{organizationId:string;accessKey:string}):Promise<OfficialDanfseDocument>{
-    const url=`https://adn.producaorestrita.nfse.gov.br/danfse/${encodeURIComponent(input.accessKey)}`;
+    const url=`${danfseEndpoints[this.environment]}/${encodeURIComponent(input.accessKey)}`;
     const response=await this.http.requestBuffer({url,organizationId:input.organizationId,headers:{accept:"application/pdf"}});
     if(response.status===404)return null;
     if(response.status!==200)throw new SafeFiscalError("DANFSE_UNAVAILABLE","Não foi possível recuperar o DANFSe oficial agora.",true);

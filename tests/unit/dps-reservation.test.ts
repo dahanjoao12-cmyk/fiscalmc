@@ -22,6 +22,12 @@ describe("reserva de DPS autenticada", () => {
     )).rejects.toMatchObject({ code: "DPS_RESERVATION_FAILED" });
   });
 
+  it("preserva a separação de sequência ao solicitar Produção", async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: 1, error: null });
+    await reserveDpsNumber({ rpc }, { organizationId, series: "00001", environment: "PRODUCTION" });
+    expect(rpc).toHaveBeenCalledWith("reserve_dps_number", expect.objectContaining({ target_env: "PRODUCTION" }));
+  });
+
   it("preserva números distintos sob chamadas concorrentes confirmadas pela RPC", async () => {
     let next = 1;
     const rpc = vi.fn().mockImplementation(async () => ({ data: next++, error: null }));
