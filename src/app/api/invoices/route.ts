@@ -20,6 +20,7 @@ import { createSupabaseInvoiceSubmissionGateway,submitInvoiceSafely } from "@/li
 import { decideIdempotencyReplay,UNKNOWN_CLIENT_MESSAGE } from "@/lib/nfse/issuance/state-machine";
 import { reconcileUnknownInvoice } from "@/lib/nfse/reconciliation/service";
 import { reserveDpsNumber } from "@/lib/nfse/issuance/dps-reservation";
+import { issuanceFailureDiagnostic, type IssuanceStage } from "@/lib/nfse/issuance/request-diagnostics";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -36,6 +37,7 @@ function responseForStored(invoice:{id:string;status:string;access_key?:string|n
 
 export async function POST(request:Request){
   const requestId=request.headers.get("x-request-id")??crypto.randomUUID();
+  let stage: IssuanceStage="AUTH";
   const parsedKey=idempotencySchema.safeParse(request.headers.get("idempotency-key"));
   if(!parsedKey.success)return NextResponse.json({error:"Chave de idempotência ausente ou inválida."},{status:400});
   const idempotencyKey=parsedKey.data;
@@ -48,10 +50,12 @@ export async function POST(request:Request){
       return NextResponse.json({status:result.status,invoiceId:result.status==="ISSUED"?result.nfseNumber:undefined,safeMessage:result.status==="UNKNOWN"?UNKNOWN_CLIENT_MESSAGE:result.status==="REJECTED"?result.safeMessage:"Nota emitida com sucesso."},{status:result.status==="UNKNOWN"?202:result.status==="REJECTED"?422:201,headers:{"X-Request-ID":requestId}});
     }
 
+    stage="AUTH";
     const session=await requireIssuanceContext(requested.organizationId);
     const authenticatedClient=await createClient();
     if(!authenticatedClient)throw new SafeFiscalError("AUTH_CONFIGURATION_REQUIRED","A sessão de emissão não está disponível.");
     const admin=createAdminClient();
+    stage="LOAD_DATA";
     let{data:existing}=await admin.from("invoices").select("id,status,access_key,nfse_number,safe_status_message,customer_id,service_template_id,amount_cents,service_date,description,dps_series,dps_number,dps_identifier").eq("organization_id",session.organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();
     if(existing&&existing.status==="UNKNOWN"){
       try{await reconcileUnknownInvoice({invoiceId:existing.id,organizationId:session.organizationId});}catch{}
@@ -70,31 +74,42 @@ export async function POST(request:Request){
       admin.from("client_accesses").select("enabled").eq("organization_id",session.organizationId).eq("enabled",true).maybeSingle(),
     ]);
     if(!organization||!customer||!service||!profile)throw new SafeFiscalError("FISCAL_CONFIGURATION_INCOMPLETE","Uma configuração fiscal desta empresa precisa ser revisada pelo escritório antes da emissão.");
+    stage="READINESS";
     const serviceReadiness=getServiceReadiness(service);
     const fiscalReadiness=getFiscalConfigurationReadiness(profile);
     const certificateReadiness=getCertificateReadiness({certificate,organizationTaxId:organization.tax_id});
     const organizationReadiness=getOrganizationReadiness({registration:{municipalRegistration:organization.municipal_registration,street:organization.street,addressNumber:organization.address_number,neighborhood:organization.neighborhood,state:organization.state},fiscal:{ready:fiscalReadiness.status==="REVIEWED",message:""},services:{ready:serviceReadiness.ready,message:""},certificate:{ready:certificateReadiness.ready,message:""},clientAccess:{ready:Boolean(clientAccess?.enabled),message:""}});
     if(process.env.NFSE_PROVIDER==="national")assertRestrictedEmissionReady({registrationReady:organizationReadiness.items.find(x=>x.key==="registration")?.ready??false,fiscalReady:fiscalReadiness.status==="REVIEWED",serviceReady:serviceReadiness.ready,certificateReady:certificateReadiness.ready,clientAccessReady:Boolean(clientAccess?.enabled),organizationStatus:organization.status,emissionBlocked:organization.emission_blocked,environment:process.env.NFSE_ENV,provider:process.env.NFSE_PROVIDER,productionEnabled:process.env.ENABLE_NFSE_PRODUCTION,restrictedTransmissionEnabled:process.env.ENABLE_NFSE_RESTRICTED_TRANSMISSION});
 
+    stage="FISCAL_RESOLUTION";
     const fiscal=await resolveFiscalConfiguration({organizationId:session.organizationId,municipalityCode:organization.municipality_code,nationalTaxCode:service.national_tax_code,municipalServiceCode:service.municipal_service_code,dpsMunicipalTaxCode:service.dps_municipal_tax_code,nbsCode:service.nbs_code,issTaxation:service.iss_taxation,issRateSource:service.iss_rate_source,fiscalReference:service.fiscal_reference,taxRegime:profile.tax_regime,reviewedAt:profile.reviewed_at,serviceDate:effective.serviceDate,dpsConfiguration:profile.dps_configuration});
     let invoice=existing;
     let dpsNumber=existing?.dps_number;
-    if(!invoice)dpsNumber=await reserveDpsNumber(authenticatedClient,{organizationId:session.organizationId,series:"00001"});
+    if(!invoice){stage="RESERVE_DPS";dpsNumber=await reserveDpsNumber(authenticatedClient,{organizationId:session.organizationId,series:"00001"});}
+    stage="BUILD_DOCUMENT";
     const document=buildFiscalDocument({organization:{id:organization.id,taxId:organization.tax_id,municipalRegistration:organization.municipal_registration??"",municipalityCode:organization.municipality_code},customer:{taxId:customer.tax_id,legalName:customer.legal_name},service:{nationalTaxCode:service.national_tax_code,municipalServiceCode:fiscal.municipalServiceCode},taxConfiguration:{regime:profile.tax_regime,taxationType:"MUNICIPAL",iss:{rateBasisPoints:fiscal.iss.rateBasisPoints,withheld:fiscal.iss.withholdingType!=="1",source:fiscal.iss.source},ibsCbs:{customerFieldsEnabled:false}},amountCents:parseMoneyToCents(effective.amount),serviceDate:effective.serviceDate,description:effective.description,dpsNumber:BigInt(dpsNumber),dpsSeries:existing?.dps_series??"00001"});
     if(!invoice){
+      stage="INVOICE_INSERT";
       const inserted=await admin.from("invoices").insert({organization_id:session.organizationId,customer_id:customer.id,service_template_id:service.id,amount_cents:document.amountCents,service_date:effective.serviceDate,description:effective.description,status:"READY",idempotency_key:idempotencyKey,dps_series:"00001",dps_number:dpsNumber,dps_identifier:document.dps.identifier,environment:"PRODUCTION_RESTRICTED",created_by:session.actorUserId}).select("id,status,dps_identifier").single();
-      if(inserted.error||!inserted.data){const replay=await admin.from("invoices").select("id,status,access_key,nfse_number,safe_status_message").eq("organization_id",session.organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();if(replay.data)return responseForStored(replay.data,requestId);throw new Error("INVOICE_PERSIST_FAILED");}
+      if(inserted.error||!inserted.data){
+        if(inserted.error)logEvent("error","INVOICE_INSERT_FAILED",{requestId,...issuanceFailureDiagnostic(stage,inserted.error)});
+        const replay=await admin.from("invoices").select("id,status,access_key,nfse_number,safe_status_message").eq("organization_id",session.organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();if(replay.data)return responseForStored(replay.data,requestId);throw new Error("INVOICE_PERSIST_FAILED");
+      }
       invoice=inserted.data as typeof existing;
     }
     if(!invoice)throw new Error("INVOICE_PERSIST_FAILED");
+    stage="AUDIT_INSERT";
     const audit=await admin.from("audit_logs").insert({organization_id:session.organizationId,actor_user_id:session.actorUserId,actor_type:session.actorType,action:"invoice_requested",entity:"invoice",entity_id:invoice.id,request_id:requestId,safe_metadata:{}});
     if(audit.error)throw new Error("INVOICE_AUDIT_FAILED");
     const attemptRequestId=crypto.randomUUID();
     logEvent("info","INVOICE_REQUESTED",{requestId,organizationId:session.organizationId,idempotencyKey});
+    stage="CLAIM_SUBMISSION";
     const submission=await submitInvoiceSafely({gateway:createSupabaseInvoiceSubmissionGateway(),invoiceId:invoice.id,organizationId:session.organizationId,requestId:attemptRequestId,dpsIdentifier:document.dps.identifier,execute:async()=>{
       if(process.env.NFSE_PROVIDER!=="national")return getNFSeProvider().issue({document,idempotencyKey,scenario:effective.scenario});
       const fiscalForDps={regime:fiscal.dpsConfiguration.regime,iss:{taxation:fiscal.iss.taxation,withholding:fiscal.iss.withholdingType,rateSource:fiscal.iss.rateSource,...(fiscal.iss.rateBasisPoints!==undefined?{rateBasisPoints:fiscal.iss.rateBasisPoints}:{}),...(fiscal.dpsConfiguration.iss.benefitNumber?{benefit:{number:fiscal.dpsConfiguration.iss.benefitNumber}}:{})},totalTaxes:fiscal.dpsConfiguration.totalTaxes};
+      stage="PREPARE_DPS";
       const prepared=await prepareRestrictedDps({organizationId:session.organizationId,document,organization:{legalName:organization.legal_name,taxId:organization.tax_id,municipalRegistration:organization.municipal_registration??"",municipalityCode:organization.municipality_code,postalCode:organization.postal_code??"",street:organization.street??"",addressNumber:organization.address_number??"",addressComplement:organization.address_complement,neighborhood:organization.neighborhood??"",state:organization.state??"",email:organization.email,phone:organization.phone},customer:{personType:customer.person_type,taxId:customer.tax_id,legalName:customer.legal_name,municipalRegistration:customer.municipal_registration,postalCode:customer.postal_code,street:customer.street,addressNumber:customer.address_number,addressComplement:customer.address_complement,neighborhood:customer.neighborhood,municipalityCode:customer.municipality_code,state:customer.state,countryCode:customer.country_code,email:customer.email,phone:customer.phone},service:{nationalTaxCode:service.national_tax_code,dpsMunicipalTaxCode:service.dps_municipal_tax_code??"",nbsCode:service.nbs_code,locationMunicipalityCode:service.service_location_municipality_code??""},fiscal:fiscalForDps});
+      stage="PROVIDER_CALL";
       return getNFSeProvider().issue({document,idempotencyKey,organizationId:session.organizationId,preparedPayload:prepared.preparedPayload});
     }});
     if(submission.kind==="REPLAY")return responseForStored({id:invoice.id,status:submission.status},requestId);
@@ -105,7 +120,7 @@ export async function POST(request:Request){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Revise os dados informados.",fields:error.flatten().fieldErrors},{status:400,headers:{"X-Request-ID":requestId}});
     if(error instanceof Error&&error.message==="RATE_LIMITED")return NextResponse.json({error:"Muitas tentativas. Aguarde um minuto e tente novamente."},{status:429,headers:{"X-Request-ID":requestId}});
     if(error instanceof SafeFiscalError)return NextResponse.json({error:error.safeMessage,code:error.code},{status:422,headers:{"X-Request-ID":requestId}});
-    logEvent("error","INVOICE_REQUEST_FAILED",{requestId,error:error instanceof Error?error.message:"unknown"});
+    logEvent("error","INVOICE_REQUEST_FAILED",{requestId,...issuanceFailureDiagnostic(stage,error)});
     return NextResponse.json({error:"Não foi possível concluir a emissão. Informe o código de atendimento ao escritório.",requestId},{status:500,headers:{"X-Request-ID":requestId}});
   }
 }
