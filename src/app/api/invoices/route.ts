@@ -7,6 +7,7 @@ import { assertRateLimit } from "@/lib/security/rate-limit";
 import { logEvent } from "@/lib/observability/logger";
 import { requireIssuanceContext } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { resolveFiscalConfiguration } from "@/lib/nfse/fiscal-rule-resolver";
 import { SafeFiscalError } from "@/lib/nfse/errors";
 import { getServiceReadiness } from "@/lib/nfse/service-readiness";
@@ -18,6 +19,7 @@ import { prepareRestrictedDps } from "@/lib/nfse/issuance/prepare-restricted-dps
 import { createSupabaseInvoiceSubmissionGateway,submitInvoiceSafely } from "@/lib/nfse/issuance/submission-service";
 import { decideIdempotencyReplay,UNKNOWN_CLIENT_MESSAGE } from "@/lib/nfse/issuance/state-machine";
 import { reconcileUnknownInvoice } from "@/lib/nfse/reconciliation/service";
+import { reserveDpsNumber } from "@/lib/nfse/issuance/dps-reservation";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -47,6 +49,8 @@ export async function POST(request:Request){
     }
 
     const session=await requireIssuanceContext(requested.organizationId);
+    const authenticatedClient=await createClient();
+    if(!authenticatedClient)throw new SafeFiscalError("AUTH_CONFIGURATION_REQUIRED","A sessão de emissão não está disponível.");
     const admin=createAdminClient();
     let{data:existing}=await admin.from("invoices").select("id,status,access_key,nfse_number,safe_status_message,customer_id,service_template_id,amount_cents,service_date,description,dps_series,dps_number,dps_identifier").eq("organization_id",session.organizationId).eq("idempotency_key",idempotencyKey).maybeSingle();
     if(existing&&existing.status==="UNKNOWN"){
@@ -75,7 +79,7 @@ export async function POST(request:Request){
     const fiscal=await resolveFiscalConfiguration({organizationId:session.organizationId,municipalityCode:organization.municipality_code,nationalTaxCode:service.national_tax_code,municipalServiceCode:service.municipal_service_code,dpsMunicipalTaxCode:service.dps_municipal_tax_code,nbsCode:service.nbs_code,issTaxation:service.iss_taxation,issRateSource:service.iss_rate_source,fiscalReference:service.fiscal_reference,taxRegime:profile.tax_regime,reviewedAt:profile.reviewed_at,serviceDate:effective.serviceDate,dpsConfiguration:profile.dps_configuration});
     let invoice=existing;
     let dpsNumber=existing?.dps_number;
-    if(!invoice){const reservation=await admin.rpc("reserve_dps_number",{target_org:session.organizationId,target_env:"PRODUCTION_RESTRICTED",target_series:"00001"});if(reservation.error||reservation.data===null)throw new Error("DPS_RESERVATION_FAILED");dpsNumber=reservation.data;}
+    if(!invoice)dpsNumber=await reserveDpsNumber(authenticatedClient,{organizationId:session.organizationId,series:"00001"});
     const document=buildFiscalDocument({organization:{id:organization.id,taxId:organization.tax_id,municipalRegistration:organization.municipal_registration??"",municipalityCode:organization.municipality_code},customer:{taxId:customer.tax_id,legalName:customer.legal_name},service:{nationalTaxCode:service.national_tax_code,municipalServiceCode:fiscal.municipalServiceCode},taxConfiguration:{regime:profile.tax_regime,taxationType:"MUNICIPAL",iss:{rateBasisPoints:fiscal.iss.rateBasisPoints,withheld:fiscal.iss.withholdingType!=="1",source:fiscal.iss.source},ibsCbs:{customerFieldsEnabled:false}},amountCents:parseMoneyToCents(effective.amount),serviceDate:effective.serviceDate,description:effective.description,dpsNumber:BigInt(dpsNumber),dpsSeries:existing?.dps_series??"00001"});
     if(!invoice){
       const inserted=await admin.from("invoices").insert({organization_id:session.organizationId,customer_id:customer.id,service_template_id:service.id,amount_cents:document.amountCents,service_date:effective.serviceDate,description:effective.description,status:"READY",idempotency_key:idempotencyKey,dps_series:"00001",dps_number:dpsNumber,dps_identifier:document.dps.identifier,environment:"PRODUCTION_RESTRICTED",created_by:session.actorUserId}).select("id,status,dps_identifier").single();

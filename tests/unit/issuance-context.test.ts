@@ -21,12 +21,28 @@ describe("contexto de emissão", () => {
     })).toThrow("FORBIDDEN_OFFICE_ISSUANCE");
   });
 
-  it("resolve a empresa selecionada para OFFICE autorizado e preserva o ator real", () => {
+  it("resolve a empresa selecionada para OFFICE associado e preserva o ator real", () => {
     expect(resolveIssuanceContextFromMemberships({
+      actorUserId,
+      requestedOrganizationId: organizationA,
+      memberships: [{ organizationId: organizationA, role: "OFFICE_STAFF" }],
+    })).toEqual({ organizationId: organizationA, actorUserId, actorType: "OFFICE", role: "OFFICE_STAFF" });
+  });
+
+  it("bloqueia OFFICE sem membership na empresa selecionada", () => {
+    expect(() => resolveIssuanceContextFromMemberships({
       actorUserId,
       requestedOrganizationId: organizationB,
       memberships: [{ organizationId: organizationA, role: "OFFICE_STAFF" }],
-    })).toEqual({ organizationId: organizationB, actorUserId, actorType: "OFFICE", role: "OFFICE_STAFF" });
+    })).toThrow("FORBIDDEN_OFFICE_ISSUANCE");
+  });
+
+  it("bloqueia ator sem membership ativa para emissão", () => {
+    expect(() => resolveIssuanceContextFromMemberships({
+      actorUserId,
+      requestedOrganizationId: organizationA,
+      memberships: [],
+    })).toThrow("FORBIDDEN_OFFICE_ISSUANCE");
   });
 
   it("exige seleção explícita de empresa para usuário exclusivamente OFFICE", () => {

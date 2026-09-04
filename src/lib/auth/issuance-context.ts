@@ -20,15 +20,13 @@ export function resolveIssuanceContextFromMemberships(input: {
   );
 
   if (input.requestedOrganizationId) {
-    if (!officeMemberships.length) throw new Error("FORBIDDEN_OFFICE_ISSUANCE");
-    const role = officeMemberships.some((item) => item.role === "SUPER_ADMIN")
-      ? "SUPER_ADMIN"
-      : "OFFICE_STAFF";
+    const membership = officeMemberships.find((item) => item.organizationId === input.requestedOrganizationId);
+    if (!membership) throw new Error("FORBIDDEN_OFFICE_ISSUANCE");
     return {
       organizationId: input.requestedOrganizationId,
       actorUserId: input.actorUserId,
       actorType: "OFFICE",
-      role,
+      role: membership.role,
     };
   }
 
