@@ -112,11 +112,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       municipalParametersEndpoints[operation.data.targetEnvironment],
       organizationId,
     );
-    await Promise.all([
+    const [convention, retentions, aliquota, aliquotaHistory] = await Promise.all([
       municipalParameters.getConvention(organization.municipality_code),
       municipalParameters.getRetentions({ municipalityCode: organization.municipality_code, competence: operation.data.competence }),
       municipalParameters.getAliquota({ municipalityCode: organization.municipality_code, serviceCode: service.municipal_service_code, competence: operation.data.competence }),
+      municipalParameters.getAliquotaHistory({ municipalityCode: organization.municipality_code, serviceCode: service.municipal_service_code }),
     ]);
+    const applicableRates = aliquota.aliquotas[service.municipal_service_code] ?? [];
+    if (!applicableRates.length) throw new Error("MUNICIPAL_PARAMETERS_INVALID");
+    const retentionMatches = (retentions.retencoes.retencoesMunicipais ?? []).flatMap((retention) =>
+      (retention.servicos ?? [])
+        .filter((serviceItem) => serviceItem.codigoCompleto === service.municipal_service_code)
+        .map(() => ({ validFrom: retention.dataInicioVigencia, validUntil: retention.dataFimVigencia, types: retention.tiposRetencao ?? [] })),
+    );
     stage = "BUILD_DOCUMENT";
     const document = buildFiscalDocument({
       organization: { id: organization.id, taxId: organization.tax_id, municipalRegistration: organization.municipal_registration ?? "", municipalityCode: organization.municipality_code },
@@ -197,6 +205,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({
       readiness: readinessResponse(organizationReadiness),
       validation: { dpsBuilt: true, dynamicRules: true, unsignedXsd: true, xmldsig: true, signatureVerification: true, signedXsd: true, gzipBase64: true, payload: true, businessRules: true, pAliqEmitted: false },
+      municipalParameters: {
+        lookupCode: service.municipal_service_code,
+        conventionAvailable: Boolean(convention),
+        aliquota: applicableRates.map((rate) => ({ incidence: rate.Incidencia, rate: rate.Aliq, validFrom: rate.DtIni, validUntil: rate.DtFim })),
+        aliquotaHistoryAvailable: Boolean(aliquotaHistory.aliquotas[service.municipal_service_code]?.length),
+        retentions: { articleSixthEnabled: retentions.retencoes.artigoSexto.habilitado, matchingRules: retentionMatches },
+      },
       target: {
         environment: operation.data.targetEnvironment,
         endpoint: `${endpoints[operation.data.targetEnvironment]}/nfse`,

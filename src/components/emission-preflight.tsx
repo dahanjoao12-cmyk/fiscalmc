@@ -6,6 +6,7 @@ import { CheckCircle2, LoaderCircle, ShieldCheck, XCircle } from "lucide-react";
 type PreflightResult = {
   readiness: { registration: boolean; fiscal: boolean; service: boolean; certificate: boolean; clientAccess: boolean; organization: boolean };
   validation: { dpsBuilt: boolean; dynamicRules: boolean; unsignedXsd: boolean; xmldsig: boolean; signatureVerification: boolean; signedXsd: boolean; gzipBase64: boolean; payload: boolean; businessRules: boolean; pAliqEmitted: boolean };
+  municipalParameters?: { lookupCode: string; conventionAvailable: boolean; aliquota: Array<{ incidence: string; rate: number; validFrom: string; validUntil: string | null }>; aliquotaHistoryAvailable: boolean; retentions: { articleSixthEnabled: boolean; matchingRules: unknown[] } };
   target: { environment: string; endpoint?: string; productionSequence?: { exists: boolean; series: string; nextNumber: number; provisionedOnFirstAuthorizedReservation?: boolean } };
   transmissionAttempted: boolean;
   sequenceConsumed: boolean;
@@ -143,6 +144,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
       </div>
       <p>Ambiente alvo: <strong>{result.target.environment === "PRODUCTION" ? "Produção — pré-validação somente leitura" : "Produção Restrita"}</strong></p>
       {result.target.productionSequence ? <p>Sequência de Produção: <strong>{result.target.productionSequence.exists ? `${result.target.productionSequence.series}/${result.target.productionSequence.nextNumber}` : "será criada apenas na primeira reserva autorizada"}</strong></p> : null}
+      {result.municipalParameters ? <p>Parâmetros oficiais: <strong>convênio {result.municipalParameters.conventionAvailable ? "consultado" : "indisponível"}; alíquota {result.municipalParameters.aliquota.map((rate) => `${rate.rate}% (${rate.incidence})`).join(", ")}; histórico {result.municipalParameters.aliquotaHistoryAvailable ? "consultado" : "indisponível"}; retenções compatíveis {result.municipalParameters.retentions.matchingRules.length}</strong></p> : null}
       <p>Alíquota na DPS: <strong>{result.validation.pAliqEmitted ? "informada" : "não informada"}</strong></p>
       <p>Transmissão: <strong>NÃO EXECUTADA</strong></p>
     </div> : null}
