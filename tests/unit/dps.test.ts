@@ -13,7 +13,27 @@ const fixturePath=new URL("../../fixtures/dps/minimal-valid-unsigned.xml",import
 async function fixture(){return readFile(fixturePath,"utf8");}
 
 describe("DPS v1.01",()=>{
-  it("forma o identificador conforme TSIdDPS",()=>expect(buildDpsIdentifier({municipalityCode:"3304557",taxId:"12345678000195",series:"00001",number:1n})).toBe("DPS330455711234567800019500001000000000000001"));
+  it("forma o identificador conforme TSIdDPS",()=>expect(buildDpsIdentifier({municipalityCode:"3304557",taxId:"12345678000195",series:"00001",number:1n})).toBe("DPS330455721234567800019500001000000000000001"));
+  it("identifica CPF como tipo 1 e preenche a inscrição federal à esquerda",()=>{
+    const identifier=buildDpsIdentifier({municipalityCode:"3304557",taxId:"12345678901",series:"00001",number:1n});
+    expect(identifier).toBe(["DPS","3304557","1","00012345678901","00001","000000000000001"].join(""));
+    expect(identifier).toHaveLength(45);
+  });
+  it("identifica CNPJ numérico como tipo 2",()=>{
+    const identifier=buildDpsIdentifier({municipalityCode:"3304557",taxId:"40241895000170",series:"00001",number:3n});
+    expect(identifier).toBe(["DPS","3304557","2","40241895000170","00001","000000000000003"].join(""));
+    expect(identifier).toHaveLength(45);
+  });
+  it("preserva o tipo 2 para CNPJ alfanumérico aceito pelo layout v1.01",()=>{
+    const identifier=buildDpsIdentifier({municipalityCode:"3304557",taxId:"AB12CD34EF5629",series:"00001",number:4n});
+    expect(identifier).toBe(["DPS","3304557","2","AB12CD34EF5629","00001","000000000000004"].join(""));
+    expect(identifier).toHaveLength(45);
+  });
+  it("mantém série com cinco posições e número com quinze posições",()=>{
+    const identifier=buildDpsIdentifier({municipalityCode:"3304557",taxId:"40241895000170",series:"00001",number:4n});
+    expect(identifier.slice(25,30)).toBe("00001");
+    expect(identifier.slice(30)).toBe("000000000000004");
+  });
   it("valida a fixture sanitizada contra o XSD oficial",async()=>expect((await validateDpsXml(await fixture())).valid).toBe(true));
   it("inicializa o runtime WASM com um XSD mínimo",async()=>await expect(validateXsdRuntimeProbe()).resolves.toBeUndefined());
   it("rejeita XML inválido no XSD mínimo",()=>expect(validateMinimalXsd("<not-probe/>").valid).toBe(false));

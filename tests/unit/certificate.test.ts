@@ -4,7 +4,12 @@ import { describe,expect,it } from "vitest";
 import { loadA1Material,validateA1 } from "@/lib/nfse/certificate/parse";
 import { CERTIFICATE_EXPIRING_SOON_DAYS,classifyCertificate,getCertificateReadiness } from "@/lib/nfse/certificate/status";
 import { certificateHolderName } from "@/lib/nfse/certificate/presentation";
+import { buildFiscalDocument } from "@/lib/nfse/issuance/domain";
+import { mapToDpsModel } from "@/lib/nfse/dps/model";
+import { buildDpsXml } from "@/lib/nfse/dps/xml";
+import { validateDpsXml } from "@/lib/nfse/dps/xsd";
 import { signDpsXml,verifyDpsSignature } from "@/lib/nfse/dps/signature";
+import { buildSefinDpsRequest } from "@/lib/nfse/dps/sefin-request";
 
 function testP12(input:{taxId:string;password:string;validFrom:Date;validUntil:Date}){
   const keys=forge.pki.rsa.generateKeyPair(1024);
@@ -63,5 +68,23 @@ describe("A1 certificate validation",()=>{
     const fixture=await readFile(new URL("../../fixtures/dps/minimal-valid-unsigned.xml",import.meta.url),"utf8");
     const signed=await signDpsXml(fixture,{organizationId:"organization-a",certificateProvider:{getCertificateMaterial:async input=>{expect(input.organizationId).toBe("organization-a");return material;}}});
     expect(verifyDpsSignature(signed)).toBe(true);
+  });
+  it("simula a DPS 00001/4 em memória com identificador CNPJ, XSD, assinatura e payload",async()=>{
+    const document=buildFiscalDocument({
+      organization:{id:"moreira",taxId:"40241895000170",municipalRegistration:"12345",municipalityCode:"3304557"},
+      customer:{taxId:"68644533000140",legalName:"ORLA RIO CONCESSIONARIA LTDA."},
+      service:{nationalTaxCode:"171901",municipalServiceCode:"001"},
+      taxConfiguration:{regime:"SIMPLES_NACIONAL",taxationType:"MUNICIPAL",iss:{withheld:false,source:"ACCEPTED_PRODUCTION_DPS"},ibsCbs:{customerFieldsEnabled:false}},
+      amountCents:10000,serviceDate:"2026-09-02",description:"Serviços contábeis - emissão de homologação",dpsSeries:"00001",dpsNumber:4n,
+    });
+    expect(document.dps.identifier).toBe(["DPS","3304557","2","40241895000170","00001","000000000000004"].join(""));
+    const model=mapToDpsModel(document,{issuer:{taxId:"40241895000170",municipalRegistration:"12345",name:"ASSESSORIA CONTABIL MOREIRA & CASTRO",address:{street:"Av. Rio Branco",number:"99",neighborhood:"Centro",postalCode:"20040004",municipalityCode:"3304557",stateOrProvince:"RJ",countryCode:"BR"}},customer:{taxId:"68644533000140",name:"ORLA RIO CONCESSIONARIA LTDA.",address:{street:"Do Joá",number:"3336",neighborhood:"Barra da Tijuca",postalCode:"22610141",municipalityCode:"3304557",stateOrProvince:"RJ",countryCode:"BR"}},serviceLocation:{municipalityCode:"3304557"},dpsMunicipalTaxCode:"001",nbsCode:"113022100",fiscal:{regime:{simpleNational:"3",simpleAssessment:"1",special:"0"},iss:{taxation:"1",withholding:"1",rateSource:"PARAMETRIZED_BY_NATIONAL"},totalTaxes:{indicator:"0"}},emittedAt:"2026-09-02T12:00:00-03:00",applicationVersion:"test"});
+    const unsigned=buildDpsXml(model);
+    expect((await validateDpsXml(unsigned)).valid).toBe(true);
+    const material=loadA1Material(testP12(validInput),validInput.password,now);
+    const signed=await signDpsXml(unsigned,{organizationId:"moreira",certificateProvider:{getCertificateMaterial:async()=>material}});
+    expect(verifyDpsSignature(signed)).toBe(true);
+    expect((await validateDpsXml(signed)).valid).toBe(true);
+    expect(buildSefinDpsRequest(signed).dpsXmlGZipB64).toMatch(/^[A-Za-z0-9+/=]+$/);
   });
 });

@@ -5,6 +5,8 @@ export function buildDpsIdentifier(input:{municipalityCode:string;taxId:string;s
   if(!/^\d{7}$/.test(input.municipalityCode)||!/^\d{5}$/.test(input.series)||input.number<1n||input.number>999999999999999n)throw new SafeFiscalError("FISCAL_CONFIGURATION_INCOMPLETE","Os dados de identificação da DPS estão incompletos.");
   const taxId=input.taxId.replace(/\W/g,"").toUpperCase();
   if(!/^\d{11}$/.test(taxId)&&!/^[0-9A-Z]{14}$/.test(taxId))throw new SafeFiscalError("FISCAL_CONFIGURATION_INCOMPLETE","A inscrição federal do prestador é inválida para a DPS.");
-  const type=taxId.length===14?"1":"2";
+  // TSIdDPS v1.01: 1 identifica CPF (11 dígitos, preenchido a 14) e
+  // 2 identifica CNPJ (14 posições, inclusive o layout alfanumérico).
+  const type=taxId.length===11?"1":"2";
   return `DPS${input.municipalityCode}${type}${taxId.padStart(14,"0")}${input.series}${input.number.toString().padStart(15,"0")}`;
 }

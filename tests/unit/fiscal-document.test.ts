@@ -17,6 +17,6 @@ describe("documento fiscal", () => {
 
     expect(document.amountCents).toBe(10_000);
     expect(document.serviceDate).toBe("2026-09-02");
-    expect(document.dps.identifier).toBe("DPS330455714024189500017000001000000000000002");
+    expect(document.dps.identifier).toBe("DPS330455724024189500017000001000000000000002");
   });
 });
