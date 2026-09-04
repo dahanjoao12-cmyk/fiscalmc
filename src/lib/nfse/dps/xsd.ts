@@ -1,10 +1,9 @@
 import { readdir,readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ParseOption,XmlBufferInputProvider,XmlDocument,XmlValidateError,XsdValidator,xmlRegisterInputProvider } from "libxml2-wasm";
+import type { NFSeEnvironment } from "../types";
 
-const schemaDirectory=join(process.cwd(),"schemas","nfse","production-restricted");
 const mainSchema="DPS_v1.01.xsd";
-const virtualSchemaBase="file:///fiscalmc-dps-schemas/";
 const schemaProvider=new XmlBufferInputProvider({});
 let schemaProviderRegistered=false;
 
@@ -16,17 +15,17 @@ export class DpsXsdRuntimeError extends Error{
   constructor(public readonly code:DpsXsdRuntimeCode,public readonly diagnostic?:SafeRuntimeDiagnostic){super(code);this.name="DpsXsdRuntimeError";}
 }
 
-/** Validates with the official DPS_v1.01 XSD and bundled relative includes/imports, entirely offline. */
-export async function validateDpsXml(xml:string):Promise<DpsXsdValidation>{
-  const schemas=await loadDpsSchemas();
+/** Validates against the official, environment-specific DPS_v1.01 bundle entirely offline. */
+export async function validateDpsXml(xml:string,environment:NFSeEnvironment="PRODUCTION_RESTRICTED"):Promise<DpsXsdValidation>{
+  const schemas=await loadDpsSchemas(environment);
   const schema=schemas.find(file=>file.fileName===mainSchema);
   if(!schema)throw new DpsXsdRuntimeError("SCHEMA_MAIN_NOT_FOUND");
-  registerOfficialSchemaProvider(schemas);
+  registerOfficialSchemaProvider(schemas,environment);
   let schemaDocument:XmlDocument|undefined;
   let dpsDocument:XmlDocument|undefined;
   let validator:XsdValidator|undefined;
   try{
-    schemaDocument=XmlDocument.fromBuffer(Buffer.from(schema.contents),parseOptions(virtualSchemaUrl(schema.fileName)));
+    schemaDocument=XmlDocument.fromBuffer(Buffer.from(schema.contents),parseOptions(virtualSchemaUrl(environment,schema.fileName)));
     validator=XsdValidator.fromDoc(schemaDocument);
     dpsDocument=XmlDocument.fromString(xml,parseOptions("file:///fiscalmc-dps-input/dps.xml"));
     validator.validate(dpsDocument);
@@ -69,26 +68,39 @@ export function validateMinimalXsd(xml:string):DpsXsdValidation{
   }
 }
 
-export async function listDpsSchemaFiles(){
-  try{return (await readdir(schemaDirectory)).filter(file=>file.endsWith(".xsd")).sort();}
+export async function listDpsSchemaFiles(environment:NFSeEnvironment="PRODUCTION_RESTRICTED"){
+  try{return (await readdir(schemaDirectory(environment))).filter(file=>file.endsWith(".xsd")).sort();}
   catch{throw new DpsXsdRuntimeError("SCHEMA_DIRECTORY_READ_FAILED");}
 }
 
-async function loadDpsSchemas(){
-  const files=await listDpsSchemaFiles();
-  try{return await Promise.all(files.map(async file=>({fileName:file,contents:await readFile(join(schemaDirectory,file),"utf8")})));}
+async function loadDpsSchemas(environment:NFSeEnvironment){
+  const files=await listDpsSchemaFiles(environment);
+  try{return await Promise.all(files.map(async file=>({fileName:file,contents:runtimeSchemaContents(file,await readFile(join(schemaDirectory(environment),file),"utf8"),environment)})));}
   catch{throw new DpsXsdRuntimeError("SCHEMA_PRELOAD_FAILED");}
 }
 
-function registerOfficialSchemaProvider(schemas:Awaited<ReturnType<typeof loadDpsSchemas>>){
-  for(const schema of schemas)schemaProvider.addBuffer(virtualSchemaUrl(schema.fileName),Buffer.from(schema.contents));
+/**
+ * The official Production v1.01 bundle uses Java-style anchors in TSSerieDPS.
+ * XML Schema regular expressions do not define ^/$ as anchors, and libxml2
+ * consequently treats the literal official expression as unsatisfiable. The
+ * source bundle remains untouched; only the equivalent runtime expression is
+ * supplied to this standards-compliant validator.
+ */
+function runtimeSchemaContents(fileName:string,contents:string,environment:NFSeEnvironment){
+  if(environment!=="PRODUCTION"||fileName!=="tiposSimples_v1.01.xsd")return contents;
+  return contents.replace('value="^0{0,4}\\d{1,5}$"','value="0{0,4}\\d{1,5}"');
+}
+
+function registerOfficialSchemaProvider(schemas:Awaited<ReturnType<typeof loadDpsSchemas>>,environment:NFSeEnvironment){
+  for(const schema of schemas)schemaProvider.addBuffer(virtualSchemaUrl(environment,schema.fileName),Buffer.from(schema.contents));
   if(!schemaProviderRegistered){
     if(!xmlRegisterInputProvider(schemaProvider))throw new DpsXsdRuntimeError("SCHEMA_PRELOAD_FAILED");
     schemaProviderRegistered=true;
   }
 }
 
-function virtualSchemaUrl(fileName:string){return `${virtualSchemaBase}${fileName}`;}
+function schemaDirectory(environment:NFSeEnvironment){return join(process.cwd(),"schemas","nfse",environment==="PRODUCTION"?"production":"production-restricted");}
+function virtualSchemaUrl(environment:NFSeEnvironment,fileName:string){return `file:///fiscalmc-dps-schemas/${environment.toLowerCase()}/${fileName}`;}
 function parseOptions(url:string){return {url,option:ParseOption.XML_PARSE_NONET|ParseOption.XML_PARSE_NO_XXE};}
 
 function safeValidationError(message:string,lineNumber:number|undefined){

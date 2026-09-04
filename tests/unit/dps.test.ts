@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { describe,expect,it } from "vitest";
 import { buildDpsIdentifier } from "@/lib/nfse/dps/identifier";
 import { decodeDpsFromSefin,encodeDpsForSefin } from "@/lib/nfse/dps/encoding";
-import { validateDpsXml,validateMinimalXsd,validateXsdRuntimeProbe } from "@/lib/nfse/dps/xsd";
+import { listDpsSchemaFiles,validateDpsXml,validateMinimalXsd,validateXsdRuntimeProbe } from "@/lib/nfse/dps/xsd";
 import { formatDpsDateTimeSaoPaulo } from "@/lib/nfse/dps/date-time";
 import { assertDpsReadiness } from "@/lib/nfse/dps/readiness";
 import { mapToDpsModel,type DpsModel } from "@/lib/nfse/dps/model";
@@ -46,6 +46,10 @@ describe("DPS v1.01",()=>{
     expect(identifier.slice(30)).toBe("000000000000004");
   });
   it("valida a fixture sanitizada contra o XSD oficial",async()=>expect((await validateDpsXml(await fixture())).valid).toBe(true));
+  it("valida a fixture contra o pacote oficial separado de Produção",async()=>{
+    await expect(listDpsSchemaFiles("PRODUCTION")).resolves.toContain("DPS_v1.01.xsd");
+    await expect(validateDpsXml(await fixture(),"PRODUCTION")).resolves.toMatchObject({valid:true,errors:[]});
+  });
   it("inicializa o runtime WASM com um XSD mínimo",async()=>await expect(validateXsdRuntimeProbe()).resolves.toBeUndefined());
   it("rejeita XML inválido no XSD mínimo",()=>expect(validateMinimalXsd("<not-probe/>").valid).toBe(false));
   it("resolve os includes e imports oficiais da DPS",async()=>expect((await validateDpsXml(await fixture())).errors).toEqual([]));

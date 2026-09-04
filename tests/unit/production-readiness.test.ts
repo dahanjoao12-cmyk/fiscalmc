@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getConfiguredNFSeEnvironment, getMunicipalParametersBaseUrl, getNFSeEnvironment } from "@/lib/nfse/environments";
+import { endpoints, getConfiguredNFSeEnvironment, getMunicipalParametersBaseUrl, getNFSeEnvironment } from "@/lib/nfse/environments";
 import { SafeFiscalError } from "@/lib/nfse/errors";
 import { assertNationalEmissionReady } from "@/lib/nfse/issuance/restricted-readiness";
 
@@ -15,6 +15,8 @@ describe("readiness de Produção", () => {
     vi.stubEnv("NFSE_ENV", "production");
     vi.stubEnv("ENABLE_NFSE_PRODUCTION", "false");
     expect(getConfiguredNFSeEnvironment()).toBe("PRODUCTION");
+    expect(endpoints.PRODUCTION).toBe("https://sefin.nfse.gov.br/SefinNacional");
+    expect(endpoints.PRODUCTION_RESTRICTED).toBe("https://sefin.producaorestrita.nfse.gov.br/SefinNacional");
     expect(getMunicipalParametersBaseUrl("PRODUCTION")).toBe("https://adn.nfse.gov.br/parametrizacao");
     expect(() => getNFSeEnvironment()).toThrow("Produção fiscal está bloqueada");
   });

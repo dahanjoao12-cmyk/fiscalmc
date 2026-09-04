@@ -140,6 +140,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     stage = "PREPARE_DPS";
     const prepared = await prepareRestrictedDps({
       organizationId,
+      environment: operation.data.targetEnvironment,
       document,
       organization: {
         legalName: organization.legal_name,

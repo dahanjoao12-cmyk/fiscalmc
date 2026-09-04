@@ -1,0 +1,8 @@
+{
+  "source": "https://www.gov.br/nfse/pt-br/biblioteca/documentacao-tecnica/documentacao-atual/nfse-esquemas_xsd-v1-01-20260209.zip",
+  "environment": "PRODUCTION",
+  "schemaVersion": "1.01",
+  "publishedPackageDate": "2026-02-09",
+  "importedFor": "production-readiness validation",
+  "note": "This bundle is intentionally separate from production-restricted schemas. The source files remain unmodified; the validator applies a documented in-memory compatibility normalization only for the official TSSerieDPS expression that uses non-XSD ^/$ anchors."
+}
