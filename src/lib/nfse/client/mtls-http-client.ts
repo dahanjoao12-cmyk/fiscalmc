@@ -2,7 +2,8 @@ import https from "node:https";
 import { LocalCertificateProvider } from "../certificate/local-provider";
 import type { CertificateProvider } from "../certificate/provider";
 export type MtlsResponse={url:string;status:number;body:unknown};
-export type MtlsTextResponse={url:string;status:number;body:string};
+export type MtlsTextResponse={url:string;status:number;body:string;contentType:string|undefined};
+export type MtlsBinaryResponse={url:string;status:number;body:Buffer;contentType:string|undefined};
 export type TransmissionDelivery="NOT_SENT"|"POSSIBLY_SENT";
 
 export class MtlsRequestError extends Error{
@@ -12,16 +13,15 @@ export class MtlsRequestError extends Error{
 /** Server-only HTTPS client. TLS peer verification is intentionally always enabled. */
 export class MtlsHttpClient {
   constructor(private readonly certificateProvider:CertificateProvider=new LocalCertificateProvider()){}
-  async requestText(input:{url:string;method?:"GET"|"HEAD"|"POST";body?:string;headers?:Record<string,string>;organizationId?:string;trackDelivery?:boolean}):Promise<MtlsTextResponse>{
+  async requestBuffer(input:{url:string;method?:"GET"|"HEAD"|"POST";body?:string;headers?:Record<string,string>;organizationId?:string;trackDelivery?:boolean}):Promise<MtlsBinaryResponse>{
     const material=await this.certificateProvider.getCertificateMaterial({organizationId:input.organizationId});
-    return new Promise<MtlsTextResponse>((resolve,reject)=>{
+    return new Promise<MtlsBinaryResponse>((resolve,reject)=>{
       let requestFinished=false;
       const rejectTracked=(message:string,causeCode?:string)=>input.trackDelivery?reject(new MtlsRequestError(message,requestFinished?"POSSIBLY_SENT":"NOT_SENT",causeCode)):reject(Object.assign(new Error(message),{code:causeCode??"MTLS_HANDSHAKE_FAILED"}));
       const request=https.request(input.url,{method:input.method??"GET",cert:material.cert,key:material.key,rejectUnauthorized:true,headers:{accept:"application/json",...input.headers}},response=>{
-        let text="";
-        response.setEncoding("utf8");
-        response.on("data",chunk=>text+=chunk);
-        response.on("end",()=>resolve({url:input.url,status:response.statusCode??0,body:text}));
+        const chunks:Buffer[]=[];
+        response.on("data",chunk=>chunks.push(Buffer.isBuffer(chunk)?chunk:Buffer.from(chunk)));
+        response.on("end",()=>resolve({url:input.url,status:response.statusCode??0,body:Buffer.concat(chunks),contentType:typeof response.headers["content-type"]==="string"?response.headers["content-type"]:undefined}));
         response.on("aborted",()=>rejectTracked("A resposta foi encerrada antes da conclusão.","ECONNRESET"));
         response.on("error",error=>rejectTracked("Falha durante a leitura da resposta.",(error as NodeJS.ErrnoException).code));
       });
@@ -34,6 +34,11 @@ export class MtlsHttpClient {
       if(input.body)request.write(input.body,"utf8");
       request.end();
     });
+  }
+
+  async requestText(input:{url:string;method?:"GET"|"HEAD"|"POST";body?:string;headers?:Record<string,string>;organizationId?:string;trackDelivery?:boolean}):Promise<MtlsTextResponse>{
+    const response=await this.requestBuffer(input);
+    return{...response,body:response.body.toString("utf8")};
   }
 
   async getJson(url:string,organizationId?:string):Promise<MtlsResponse>{
