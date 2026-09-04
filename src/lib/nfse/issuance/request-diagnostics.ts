@@ -41,6 +41,7 @@ export function sanitizeDatabaseDiagnostic(value: unknown) {
   const details = text(error.details);
   const hint = text(error.hint);
   const redactValues = (input: string) => input
+    .replace(/(["'])[^"']*\1/g, "[redacted]")
     .replace(/=\([^)]*\)/g, "=[redacted]")
     .replace(/\b\d{11,14}\b/g, "[redacted]")
     .replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, "[redacted]")
