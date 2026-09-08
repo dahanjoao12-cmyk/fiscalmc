@@ -9,8 +9,7 @@ import { MunicipalRegistrationForm } from "@/components/municipal-registration-f
 import { EmissionPreflight } from "@/components/emission-preflight";
 import { IssueForm, type IssueCustomer, type IssueService } from "@/components/issue-form";
 import { StatusBadge, formatDate, formatTaxId } from "@/components/ui-kit";
-import { requireOfficeSession } from "@/lib/auth/session";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireOfficeDataClient, requireOfficeSession } from "@/lib/auth/session";
 import { getFiscalConfigurationReadiness } from "@/lib/nfse/fiscal-configuration";
 import { getServiceReadiness } from "@/lib/nfse/service-readiness";
 import { getCertificateReadiness } from "@/lib/nfse/certificate/status";
@@ -33,7 +32,8 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   const needsFiscal = isOverview || tab === "fiscal";
   const needsCertificate = isOverview || tab === "certificate";
   const needsAccess = isOverview || tab === "users";
-  const db = createAdminClient();
+  const db = await requireOfficeDataClient().catch(() => null);
+  if (!db) redirect("/app?notice=office");
   const canReadCertificate = can(officeSession.role, "certificate:read");
   const canManageCertificate = can(officeSession.role, "certificate:write");
   const canReadClientAccess = can(officeSession.role, "client-access:read");

@@ -2,13 +2,13 @@ import Link from "next/link";
 import { FilePlus2 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { PageHeader, StatusBadge, formatTaxId } from "@/components/ui-kit";
-import { requireOfficeSession } from "@/lib/auth/session";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireOfficeDataClient, requireOfficeSession } from "@/lib/auth/session";
 
 export default async function OfficeEmissionsPage() {
   const session = await requireOfficeSession().catch(() => null);
   if (!session) redirect("/app?notice=office");
-  const db = createAdminClient();
+  const db = await requireOfficeDataClient().catch(() => null);
+  if (!db) redirect("/app?notice=office");
   const [{ data: companies }, { data: memberships }] = await Promise.all([
     db.from("organizations").select("id,legal_name,tax_id,municipality_code,state,status,emission_blocked").order("legal_name"),
     db.from("memberships").select("organization_id,active").eq("user_id", session.userId).eq("active", true),

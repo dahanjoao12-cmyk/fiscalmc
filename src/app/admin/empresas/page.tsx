@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { ArrowUpRight, FilePlus2, Plus, Search } from "lucide-react";
 import { redirect } from "next/navigation";
-import { requireOfficeSession } from "@/lib/auth/session";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireOfficeDataClient } from "@/lib/auth/session";
 import { EmptyState, PageHeader, StatusBadge, formatTaxId } from "@/components/ui-kit";
 
 export default async function CompaniesPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; municipality?: string; readiness?: string }> }) {
-  try { await requireOfficeSession(); } catch { redirect("/app?notice=office"); }
+  const db = await requireOfficeDataClient().catch(() => null);
+  if (!db) redirect("/app?notice=office");
   const filters = await searchParams;
-  const db = createAdminClient();
   let query = db.from("organizations").select("id,legal_name,tax_id,municipality_code,state,status,emission_blocked").order("legal_name");
   if (filters.q?.trim()) query = query.or(`legal_name.ilike.%${filters.q.trim()}%,tax_id.ilike.%${filters.q.replace(/\D/g, "")}%`);
   if (filters.status) query = query.eq("status", filters.status);

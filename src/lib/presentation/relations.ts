@@ -1,0 +1,2 @@
+export function relationOne<T>(value: T | T[] | null | undefined) { return Array.isArray(value) ? value[0] ?? null : value ?? null; }
+export function relationName(value: { legal_name?: string | null; name?: string | null } | { legal_name?: string | null; name?: string | null }[] | null | undefined, fallback: string) { const row=relationOne(value); return row?.legal_name ?? row?.name ?? fallback; }

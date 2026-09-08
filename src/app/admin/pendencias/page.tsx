@@ -3,14 +3,13 @@ import { ArrowRight, CircleAlert } from "lucide-react";
 import { redirect } from "next/navigation";
 import { EmptyState, PageHeader, StatusBadge, formatDateTime } from "@/components/ui-kit";
 import { getCertificateOperationalState, getOperationalPriority, operationalAgeHours, type OperationalItem, type OperationalItemType } from "@/lib/operations/queue";
-import { requireOfficeSession } from "@/lib/auth/session";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireOfficeDataClient } from "@/lib/auth/session";
 
 function priorityTone(priority: string): "danger" | "warning" | "info" { return priority === "CRITICAL" ? "danger" : priority === "HIGH" ? "warning" : "info"; }
 
 export default async function OperationalQueuePage() {
-  try { await requireOfficeSession(); } catch { redirect("/app?notice=office"); }
-  const db = createAdminClient();
+  const db = await requireOfficeDataClient().catch(() => null);
+  if (!db) redirect("/app?notice=office");
   const [invoicesResult, certificatesResult, servicesResult, organizationsResult, accessesResult, cancellationsResult] = await Promise.all([
     db.from("invoices").select("id,organization_id,status,created_at,updated_at,amount_cents,customers(legal_name),organizations(legal_name)").in("status", ["UNKNOWN", "REJECTED"]).order("updated_at", { ascending: false }).limit(250),
     db.from("digital_certificates").select("id,organization_id,status,valid_until,created_at,organizations(legal_name)").is("replaced_at", null).order("valid_until").limit(250),

@@ -72,6 +72,19 @@ export async function requireOfficeSession():Promise<OfficeSession>{
   return{userId:user.id,role:officeMemberships.some(item=>item.role==="SUPER_ADMIN")?"SUPER_ADMIN":"OFFICE_STAFF",displayName:user.displayName};
 }
 
+/**
+ * Client scoped to the authenticated user's JWT. Use this for routine OFFICE
+ * reads so that database RLS remains the authorization boundary. Operations
+ * that genuinely require elevation must continue to use createAdminClient
+ * explicitly from their server-only implementation.
+ */
+export async function requireOfficeDataClient(){
+  await requireOfficeSession();
+  const {client}=await getAuthenticatedClient();
+  if(!client)throw new Error("AUTH_CONFIGURATION_REQUIRED");
+  return client;
+}
+
 export async function getShellIdentity(){
   const {client,user}=await getAuthenticatedClient();
   if(!client)return null;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { BriefcaseBusiness, Building2, CircleAlert, FileCheck2, FilePlus2, FileText, Home, LogOut, ScrollText, Settings, ShieldCheck, UserRound, UsersRound, XCircle } from "lucide-react";
+import { BriefcaseBusiness, Building2, CircleAlert, FileCheck2, FilePlus2, FileText, Home, LogOut, Menu, ScrollText, Settings, ShieldCheck, UserRound, UsersRound, XCircle } from "lucide-react";
 import { Brand } from "./brand";
 import { ShellNavLink } from "./shell-nav-link";
 import { getShellIdentity } from "@/lib/auth/session";
@@ -19,15 +19,20 @@ const clientNav = [
 const adminNav = [
   ["home", "/admin", "Visão geral", Home],
   ["companies", "/admin/empresas", "Empresas", Building2],
-  ["pending", "/admin/pendencias", "Pendências", CircleAlert],
-  ["services", "/admin/servicos", "Validação de serviços", BriefcaseBusiness],
   ["emissions", "/admin/emissoes", "Emissões", FilePlus2],
-  ["invoices", "/admin/notas", "Notas", FileText],
+  ["invoices", "/admin/notas", "Notas fiscais", FileText],
+  ["pending", "/admin/pendencias", "Pendências", CircleAlert],
+  ["services", "/admin/servicos", "Serviços", BriefcaseBusiness],
   ["customers", "/admin/tomadores", "Tomadores", UsersRound],
-  ["certificates", "/admin/certificados", "Certificados", ShieldCheck],
   ["cancellations", "/admin/cancelamentos", "Cancelamentos", XCircle],
+  ["certificates", "/admin/certificados", "Certificados", ShieldCheck],
   ["logs", "/admin/logs", "Logs", ScrollText],
   ["settings", "/admin/configuracoes", "Configurações", Settings]
+] as const;
+const adminGroups = [
+  ["Principal", adminNav.slice(0, 4)],
+  ["Operação", adminNav.slice(4, 8)],
+  ["Administração", adminNav.slice(8)],
 ] as const;
 
 export function AppShell({ children, admin = false }: ShellProps) {
@@ -38,9 +43,7 @@ export function AppShell({ children, admin = false }: ShellProps) {
   return <div className="shell">
     <aside className={`sidebar${admin ? " admin" : ""}`}>
       <Link href={admin ? "/admin" : "/app"} aria-label="Página inicial"><Brand inverse={admin} /></Link>
-      <nav className="nav" aria-label="Navegação principal">
-        {nav.map(([key, href, label, Icon]) => <ShellNavLink key={key} itemKey={key} href={href} className="nav-link"><Icon size={20} aria-hidden />{label}</ShellNavLink>)}
-      </nav>
+      <nav className="nav" aria-label="Navegação principal">{admin ? adminGroups.map(([title,items])=><section className="nav-group" key={title}><span>{title}</span>{items.map(([key,href,label,Icon])=><ShellNavLink key={key} itemKey={key} href={href} className="nav-link"><Icon size={18} aria-hidden />{label}</ShellNavLink>)}</section>) : nav.map(([key, href, label, Icon]) => <ShellNavLink key={key} itemKey={key} href={href} className="nav-link"><Icon size={20} aria-hidden />{label}</ShellNavLink>)}</nav>
       <div className="sidebar-bottom">
         {admin ? <div className="sidebar-ctas">
           <Link className="button primary" href="/admin/emissoes"><FileCheck2 size={18} aria-hidden />Emitir NFS-e</Link>
@@ -61,7 +64,8 @@ export function AppShell({ children, admin = false }: ShellProps) {
       {children}
     </main>
     <nav className={`mobile-nav${admin ? " admin" : ""}`} aria-label={admin ? "Navegação do escritório" : "Navegação do cliente"}>
-      {nav.map(([key, href, label, Icon]) => <ShellNavLink key={key} itemKey={key} href={href}><Icon size={22} aria-hidden /><span>{mobileLabel(key, label)}</span></ShellNavLink>)}
+      {(admin ? adminNav.slice(0, 4) : nav.slice(0, 5)).map(([key, href, label, Icon]) => <ShellNavLink key={key} itemKey={key} href={href}><Icon size={22} aria-hidden /><span>{mobileLabel(key, label)}</span></ShellNavLink>)}
+      {admin ? <details className="mobile-more"><summary><Menu size={22} aria-hidden /><span>Mais</span></summary><div className="mobile-more-drawer"><div><strong>Mais opções</strong><small>Operação e administração</small></div>{adminNav.slice(4).map(([key, href, label, Icon]) => <ShellNavLink key={key} itemKey={key} href={href} className="mobile-more-link"><Icon size={18} aria-hidden />{label}</ShellNavLink>)}<form action={logout}><button className="mobile-more-link" type="submit"><LogOut size={18} aria-hidden />Sair</button></form></div></details> : null}
     </nav>
   </div>;
 }

@@ -4,6 +4,7 @@ import { InvoiceList, type InvoiceRow } from "@/components/invoice-list";
 import { MetricTile, PageHeader, StatusBadge } from "@/components/ui-kit";
 import { requireClientPageSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { relationName } from "@/lib/presentation/relations";
 
 export default async function DashboardPage() {
   const session = await requireClientPageSession();
@@ -13,7 +14,7 @@ export default async function DashboardPage() {
     db.from("invoices").select("id,dps_number,nfse_number,amount_cents,status,service_date,created_at,updated_at,customers(legal_name),service_templates(name)").eq("organization_id", session.organizationId).gte("service_date", `${month}-01`).order("created_at", { ascending: false }).limit(20),
     db.from("organizations").select("legal_name,emission_blocked").eq("id", session.organizationId).maybeSingle(),
   ]);
-  const rows: InvoiceRow[] = (invoices ?? []).map((item) => ({ id: item.id, number: item.nfse_number ?? item.dps_number?.toString() ?? "Em confirmação", amountCents: item.amount_cents, status: item.status, date: item.service_date, updatedAt: item.updated_at, customer: item.customers?.[0]?.legal_name ?? "Tomador não disponível", service: item.service_templates?.[0]?.name ?? "Serviço não disponível" }));
+  const rows: InvoiceRow[] = (invoices ?? []).map((item) => ({ id: item.id, number: item.nfse_number ?? item.dps_number?.toString() ?? "Em confirmação", amountCents: item.amount_cents, status: item.status, date: item.service_date, updatedAt: item.updated_at, customer: relationName(item.customers,"Tomador não disponível"), service: relationName(item.service_templates,"Serviço não disponível") }));
   const confirming = rows.filter((item) => item.status === "UNKNOWN" || item.status === "SUBMITTING").length;
   const pending = rows.filter((item) => item.status === "REJECTED").length;
   return <div className="page v2-page client-dashboard"><PageHeader title="Início" description={`Operação fiscal de ${organization?.legal_name ?? "sua empresa"}.`} />
