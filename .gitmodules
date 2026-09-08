@@ -1,0 +1,3 @@
+[submodule ".agents/frontend-de-cria"]
+	path = .agents/frontend-de-cria
+	url = https://github.com/dahan1981/frontend-de-cria.git
