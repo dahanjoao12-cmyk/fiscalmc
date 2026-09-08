@@ -69,9 +69,31 @@ export async function POST(request: Request) {
       if (!catalog) return NextResponse.json({ error: "Serviço do catálogo não encontrado." }, { status: 404 });
       const { data: duplicate } = await db.from("service_templates").select(clientServiceSelect).eq("organization_id", session.organizationId).eq("national_service_code_id", catalog.id).maybeSingle();
       if (duplicate) return NextResponse.json({ service: duplicate, duplicate: true });
-      const { data: proven } = await db.from("service_templates").select(reusableFiscalFields)
+      const { data: organization } = await db.from("organizations").select("municipality_code").eq("id", session.organizationId).maybeSingle();
+      let reusable: Record<string, unknown> | null = null;
+      let reuseSource: "ORGANIZATION_PROVEN_CONFIGURATION" | "MUNICIPALITY_PROVEN_CONFIGURATION" | null = null;
+      const { data: sameOrg } = await db.from("service_templates").select(reusableFiscalFields)
         .eq("organization_id", session.organizationId).eq("national_tax_code", catalog.code).in("workflow_status", ["REVIEWED", "AUTO_READY"]).eq("active", true).limit(1).maybeSingle();
-      const reusable = proven && getServiceReadiness(proven).ready ? proven : null;
+      if (sameOrg && getServiceReadiness(sameOrg).ready) {
+        reusable = sameOrg;
+        reuseSource = "ORGANIZATION_PROVEN_CONFIGURATION";
+      } else if (organization?.municipality_code) {
+        // Municipal service classification (mapping, NBS code, ISS taxation) is a
+        // property of the service item and municipality, not of the taxpayer, so a
+        // configuration the office already reviewed for another company in the same
+        // municipality is safe evidence to reuse — this never fabricates a
+        // classification, it only widens whose prior human review counts as proof.
+        const { data: municipalityOrgs } = await db.from("organizations").select("id").eq("municipality_code", organization.municipality_code);
+        const municipalityOrgIds = (municipalityOrgs ?? []).map((item) => item.id);
+        if (municipalityOrgIds.length) {
+          const { data: sameMunicipality } = await db.from("service_templates").select(reusableFiscalFields)
+            .in("organization_id", municipalityOrgIds).eq("national_tax_code", catalog.code).in("workflow_status", ["REVIEWED", "AUTO_READY"]).eq("active", true).limit(1).maybeSingle();
+          if (sameMunicipality && getServiceReadiness(sameMunicipality).ready) {
+            reusable = sameMunicipality;
+            reuseSource = "MUNICIPALITY_PROVEN_CONFIGURATION";
+          }
+        }
+      }
       const now = new Date().toISOString();
       const values = reusable ? {
         ...reusable,
@@ -80,7 +102,7 @@ export async function POST(request: Request) {
         reviewed_at: null,
         reviewed_by: null,
         auto_ready_at: now,
-        auto_ready_source: "ORGANIZATION_PROVEN_CONFIGURATION",
+        auto_ready_source: reuseSource,
       } : {
         national_service_code_id: catalog.id,
         national_tax_code: catalog.code,
