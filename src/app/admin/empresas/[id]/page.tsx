@@ -10,6 +10,7 @@ import { EmissionPreflight } from "@/components/emission-preflight";
 import { IssueForm, type IssueCustomer, type IssueService } from "@/components/issue-form";
 import { StatusBadge, formatDate, formatTaxId } from "@/components/ui-kit";
 import { requireOfficeDataClient, requireOfficeSession } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getFiscalConfigurationReadiness } from "@/lib/nfse/fiscal-configuration";
 import { getServiceReadiness } from "@/lib/nfse/service-readiness";
 import { getCertificateReadiness } from "@/lib/nfse/certificate/status";
@@ -41,7 +42,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   const canRunEmissionPreflight = can(officeSession.role, "invoice:issue");
   const [companyResult, servicesResult, taxProfileResult, catalogResult, customersResult, certificateResult, clientAccessResult, lastInvoiceResult] = await Promise.all([
     db.from("organizations").select("id,legal_name,trade_name,tax_id,municipality_code,status,emission_blocked,municipal_registration,street,address_number,address_complement,neighborhood,state,postal_code,email,phone").eq("id", id).maybeSingle(),
-    needsServices ? db.from("service_templates").select("id,name,default_description,active,workflow_status,created_via,client_service_location,client_note,needs_info_message,submitted_at,review_note,updated_at,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by,national_service_codes(display_code,description)").eq("organization_id", id).order("updated_at", { ascending: false }) : Promise.resolve({ data: [] }),
+    needsServices ? createAdminClient().from("service_templates").select("id,name,default_description,active,workflow_status,created_via,client_service_location,client_note,needs_info_message,submitted_at,review_note,updated_at,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by,national_service_codes(display_code,description)").eq("organization_id", id).order("updated_at", { ascending: false }) : Promise.resolve({ data: [] }),
     needsFiscal ? db.from("tax_profiles").select("tax_regime,dps_configuration,reviewed_at,reviewed_by").eq("organization_id", id).maybeSingle() : Promise.resolve({ data: null }),
     tab === "services" ? db.from("national_service_codes").select("id", { count: "exact", head: true }) : Promise.resolve({ count: 0 }),
     tab === "issue" || isOverview ? db.from("customers").select("id,legal_name,tax_id").eq("organization_id", id).order("legal_name") : Promise.resolve({ data: [] }),

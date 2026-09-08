@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ArrowRight, BriefcaseBusiness, Search } from "lucide-react";
 import { redirect } from "next/navigation";
 import { EmptyState, PageHeader, StatusBadge, formatDateTime } from "@/components/ui-kit";
-import { requireOfficeDataClient } from "@/lib/auth/session";
+import { requireOfficeSession } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { type ServiceWorkflowStatus } from "@/lib/services/workflow";
 
 type OrganizationRelation = { legal_name: string; municipality_code: string; state: string | null };
@@ -29,10 +30,9 @@ function configurationLabel(service: QueueService) {
 }
 
 export default async function ServiceValidationPage({ searchParams }: { searchParams: Promise<{ q?: string; view?: string }> }) {
-  const db = await requireOfficeDataClient().catch(() => null);
-  if (!db) redirect("/app?notice=office");
+  try { await requireOfficeSession(); } catch { redirect("/app?notice=office"); }
   const filters = await searchParams;
-  const { data } = await db.from("service_templates")
+  const { data } = await createAdminClient().from("service_templates")
     .select("id,organization_id,name,default_description,client_service_location,workflow_status,submitted_at,updated_at,created_via,needs_info_message,national_service_code_id,municipal_service_mapping_id,organizations(legal_name,municipality_code,state)")
     .order("submitted_at", { ascending: true, nullsFirst: false }).order("updated_at", { ascending: false }).limit(500);
   const normalized = (data ?? []) as QueueService[];
