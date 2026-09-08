@@ -1,84 +1,203 @@
 "use client";
 
 import Link from "next/link";
-import { Check, Eye, FileCheck2, LoaderCircle, Send, UserPlus, WifiOff } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronLeft, ChevronRight, FileCheck2, FileText, LoaderCircle, Search, Send, UserPlus, WifiOff } from "lucide-react";
+import { useEffect, useState } from "react";
 import { getInvoicePresentation } from "@/lib/invoices/presentation";
+import { canAdvanceClientIssuance, clientIssuanceSteps, getCatalogSelectionOutcome, mergeCatalogPage, type ClientIssuanceStep } from "@/lib/issuance/client-flow";
 
 export type IssueCustomer = { id: string; legalName: string; taxId?: string | null };
 export type IssueService = { id: string; name: string; defaultDescription?: string | null };
-type Props = { customers: IssueCustomer[]; services: IssueService[]; mock?: boolean; issuanceOrganizationId?: string; requiresProductionConfirmation?: boolean };
-type Result = { status: "ISSUED" | "REJECTED" | "UNKNOWN"; invoiceId?: string; safeMessage: string };
-const steps = ["Tomador", "Serviço", "Valores", "Revisão", "Emitir"];
+type Props = { customers: IssueCustomer[]; services: IssueService[]; mock?: boolean; issuanceOrganizationId?: string; requiresProductionConfirmation?: boolean; catalogEnabled?: boolean };
+type Result = { status: "ISSUED" | "REJECTED" | "UNKNOWN"; invoiceId?: string; nfseNumber?: string | null; safeMessage: string };
+type CatalogItem = { id: string; description: string; added: boolean };
+type CatalogServiceResult = { service?: { id: string; name: string; default_description?: string | null; workflow_status?: string }; autoReady?: boolean; error?: string };
 
-export function IssueForm({ customers, services, mock = false, issuanceOrganizationId, requiresProductionConfirmation = false }: Props) {
+function formatDate(value: string) { return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "Não informado"; }
+function formatAmount(value: string) { return value ? `R$ ${value}` : "R$ 0,00"; }
+
+export function IssueForm({ customers, services, mock = false, issuanceOrganizationId, requiresProductionConfirmation = false, catalogEnabled = false }: Props) {
+  const [availableServices, setAvailableServices] = useState(services);
   const [selectedCustomerId, setCustomerId] = useState(customers[0]?.id ?? "");
   const [selectedServiceTemplateId, setServiceId] = useState(services[0]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState(services[0]?.defaultDescription ?? "");
-  const [preview, setPreview] = useState(false);
+  const [step, setStep] = useState<ClientIssuanceStep>(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [productionConfirmed, setProductionConfirmed] = useState(false);
   const customer = customers.find((item) => item.id === selectedCustomerId);
-  const service = services.find((item) => item.id === selectedServiceTemplateId);
-  const canPreview = Boolean(customer && service && amount && description.trim().length >= 3 && date);
-  const activeStep = preview ? 4 : amount ? 3 : service ? 2 : customer ? 1 : 0;
+  const service = availableServices.find((item) => item.id === selectedServiceTemplateId);
+  const canContinue = canAdvanceClientIssuance({ step, hasCustomer: Boolean(customer), hasService: Boolean(service), amount, date, description });
 
-  function changed(action: () => void) { action(); setPreview(false); setError(""); }
+  function changed(action: () => void) { action(); setError(""); }
+  function goTo(next: ClientIssuanceStep) { setError(""); setStep(next); }
+  function selectService(value: string) {
+    changed(() => {
+      const next = availableServices.find((item) => item.id === value);
+      setServiceId(value);
+      if (next?.defaultDescription && description === service?.defaultDescription) setDescription(next.defaultDescription);
+    });
+  }
+
+  function selectCatalogService(next: IssueService) {
+    setAvailableServices((current) => current.some((item) => item.id === next.id) ? current.map((item) => item.id === next.id ? next : item) : [next, ...current]);
+    changed(() => {
+      setServiceId(next.id);
+      if (next.defaultDescription && (!description || description === service?.defaultDescription)) setDescription(next.defaultDescription);
+    });
+  }
+
   async function issue() {
-    if (!preview) return;
+    if (step !== 3 || !canContinue) return;
     setSubmitting(true);
+    setStep(4);
     try {
-      const response = await fetch("/api/invoices", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ ...(issuanceOrganizationId ? { organizationId: issuanceOrganizationId } : {}), customerId: selectedCustomerId, serviceTemplateId: selectedServiceTemplateId, amount: amount.replace(/\./g, "").replace(",", "."), serviceDate: date, description, ...(requiresProductionConfirmation ? { productionConfirmation: productionConfirmed } : {}), ...(mock ? { scenario: "success" } : {}) }) });
+      const response = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({
+          ...(issuanceOrganizationId ? { organizationId: issuanceOrganizationId } : {}),
+          customerId: selectedCustomerId,
+          serviceTemplateId: selectedServiceTemplateId,
+          amount: amount.replace(/\./g, "").replace(",", "."),
+          serviceDate: date,
+          description,
+          ...(requiresProductionConfirmation ? { productionConfirmation: productionConfirmed } : {}),
+          ...(mock ? { scenario: "success" } : {}),
+        }),
+      });
       const payload = await response.json() as Result & { error?: string };
       if (payload.status === "REJECTED" || payload.status === "UNKNOWN" || payload.status === "ISSUED") {
         setResult(payload);
         setIdempotencyKey(crypto.randomUUID());
         return;
       }
-      if (!response.ok) throw new Error(payload.error ?? payload.safeMessage ?? "Não foi possível concluir a emissão.");
+      if (!response.ok) throw new Error("ISSUANCE_NOT_COMPLETED");
       setResult(payload);
       setIdempotencyKey(crypto.randomUUID());
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível concluir a emissão."); }
-    finally { setSubmitting(false); }
+    } catch {
+      setStep(3);
+      setError("Não foi possível emitir a nota. Alguns dados precisam ser revisados antes de tentar novamente.");
+    } finally { setSubmitting(false); }
   }
 
-  if (result) {
-    const presentation = getInvoicePresentation(result.status, result.safeMessage);
-    const detailHref = result.invoiceId && !mock ? `/app/notas/${result.invoiceId}` : null;
-    return <section className={`v2-result-panel is-${presentation.tone}`} role="status" aria-live="polite"><span><FileCheck2 size={25} aria-hidden /></span><div><h2>{presentation.title}</h2><p>{presentation.description}</p>{result.status === "ISSUED" ? <dl className="v2-result-summary"><div><dt>Tomador</dt><dd>{customer?.legalName ?? "—"}</dd></div><div><dt>Valor</dt><dd>{amount ? `R$ ${amount}` : "—"}</dd></div><div><dt>Data</dt><dd>{date ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`)) : "—"}</dd></div></dl> : null}{result.status === "UNKNOWN" ? <p className="v2-result-note">Você pode sair desta tela. A nota continuará sendo acompanhada pelo sistema.</p> : null}<div className="v2-result-actions">{detailHref ? <Link className="button primary" href={detailHref}>Ver nota</Link> : null}{result.status === "UNKNOWN" && detailHref ? <Link className="button secondary" href={detailHref}>Acompanhar situação</Link> : null}{result.status !== "UNKNOWN" ? <button className="button secondary" type="button" onClick={() => { setResult(null); setPreview(false); setError(""); setIdempotencyKey(crypto.randomUUID()); }}>Emitir outra NFS-e</button> : null}</div></div></section>;
-  }
-  if (!services.length) return <section className="v2-empty v2-panel"><strong>Nenhum serviço está disponível para emissão.</strong><p>Entre em contato com o escritório para revisar os serviços fiscais.</p></section>;
+  if (result) return <IssuanceResult result={result} customer={customer} amount={amount} mock={mock} onAgain={() => { setResult(null); setStep(0); setError(""); setIdempotencyKey(crypto.randomUUID()); }} />;
+  if (!availableServices.length && !catalogEnabled) return <section className="issuance-empty"><FileText size={24} aria-hidden /><div><h2>Nenhum serviço está disponível para emissão.</h2><p>Gerencie os serviços da empresa para deixar um serviço pronto para emitir.</p><Link className="button primary" href="/app/servicos">Gerenciar meus serviços</Link></div></section>;
 
-  return <section className="v2-issue-flow">
-    <ol className="v2-stepper" aria-label="Etapas da emissão">{steps.map((step, index) => <li className={index < activeStep ? "done" : index === activeStep ? "active" : ""} key={step}><span>{index < activeStep ? <Check size={14} /> : index + 1}</span><strong>{step}</strong></li>)}</ol>
-    {error ? <div className="alert error v2-alert"><WifiOff size={17} />{error}</div> : null}
-    <div className="v2-issue-layout">
-      <form className="v2-issue-form" onSubmit={(event) => event.preventDefault()}>
-        <section className="v2-form-section"><div className="v2-form-section-heading"><span>1</span><div><h2>Tomador</h2><p>Selecione quem receberá a nota fiscal.</p></div></div>
-          {customers.length ? <label className="field"><span>Tomador do serviço</span><select className="input" id="customer" value={selectedCustomerId} onChange={(event) => changed(() => setCustomerId(event.target.value))}>{customers.map((item) => <option value={item.id} key={item.id}>{item.legalName}{item.taxId ? ` — ${item.taxId}` : ""}</option>)}</select></label> : <div className="v2-inline-empty"><div><strong>Nenhum tomador cadastrado.</strong><p>Cadastre um tomador sem perder os dados desta emissão.</p></div><Link className="button secondary" href="/app/tomadores"><UserPlus size={17} />Novo tomador</Link></div>}
-        </section>
-        <section className="v2-form-section"><div className="v2-form-section-heading"><span>2</span><div><h2>Serviço</h2><p>Escolha um serviço fiscal já revisado pelo escritório.</p></div></div>
-          <label className="field"><span>Serviço prestado</span><select className="input" id="service" value={selectedServiceTemplateId} onChange={(event) => changed(() => { const next = services.find((item) => item.id === event.target.value); setServiceId(event.target.value); if (next?.defaultDescription && description === service?.defaultDescription) setDescription(next.defaultDescription); })}>{services.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-          <label className="field"><span>Descrição do serviço</span><textarea className="input" id="description" value={description} maxLength={1000} onChange={(event) => changed(() => setDescription(event.target.value))} /></label>
-        </section>
-        <section className="v2-form-section"><div className="v2-form-section-heading"><span>3</span><div><h2>Valores</h2><p>Informe a competência e o valor total do serviço.</p></div></div>
-          <div className="v2-form-grid"><label className="field"><span>Data da prestação</span><input className="input" id="date" type="date" value={date} onChange={(event) => changed(() => setDate(event.target.value))} /></label><label className="field"><span>Valor total</span><div className="money-input"><span>R$</span><input className="input" id="amount" inputMode="decimal" value={amount} placeholder="0,00" onChange={(event) => changed(() => setAmount(event.target.value))} /></div></label></div>
-        </section>
-        {requiresProductionConfirmation ? <section className="alert warning" aria-label="Confirmação de Produção"><strong>AMBIENTE: PRODUÇÃO</strong><p>Esta NFS-e terá validade fiscal.</p><label><input type="checkbox" checked={productionConfirmed} onChange={(event) => setProductionConfirmed(event.target.checked)} /> Confirmo a revisão desta operação e autorizo a emissão em Produção.</label></section> : null}
-        <div className="v2-issue-actions"><button className="button secondary" type="button" disabled={!canPreview || submitting} onClick={() => setPreview(true)}><Eye size={18} />Revisar emissão</button><button className="button primary" type="button" disabled={!preview || submitting || !customers.length || (requiresProductionConfirmation && !productionConfirmed)} onClick={issue}>{submitting ? <><LoaderCircle className="spin" size={18} />Emitindo…</> : <><Send size={18} />Emitir NFS-e</>}</button></div>
+  const currentTitle = clientIssuanceSteps[step] ?? "Emitir";
+  return <section className="issuance-experience">
+    <ol className="issuance-stepper" aria-label="Etapas da emissão">{clientIssuanceSteps.map((label, index) => <li className={index < step ? "done" : index === step ? "active" : ""} key={label}><span>{index < step ? <Check size={14} aria-hidden /> : index + 1}</span><strong>{label}</strong><i aria-hidden /></li>)}</ol>
+    <div className="issuance-mobile-progress" aria-label={`Etapa ${Math.min(step + 1, 5)} de 5: ${currentTitle}`}><div><span>Etapa {Math.min(step + 1, 5)} de 5</span><strong>{currentTitle}</strong></div><i><b style={{ width: `${Math.min(((step + 1) / 5) * 100, 100)}%` }} /></i></div>
+    {error ? <div className="alert error issuance-error" role="alert"><WifiOff size={17} aria-hidden />{error}</div> : null}
+    <div className="issuance-layout">
+      <form className="issuance-form" onSubmit={(event) => event.preventDefault()}>
+        {step === 0 ? <RecipientStep customers={customers} selectedCustomerId={selectedCustomerId} onChange={(value) => changed(() => setCustomerId(value))} /> : null}
+        {step === 1 ? <ServiceStep services={availableServices} selectedServiceId={selectedServiceTemplateId} onChange={selectService} catalogEnabled={catalogEnabled} onCatalogReady={selectCatalogService} /> : null}
+        {step === 2 ? <ValuesStep amount={amount} date={date} description={description} onAmount={(value) => changed(() => setAmount(value))} onDate={(value) => changed(() => setDate(value))} onDescription={(value) => changed(() => setDescription(value))} /> : null}
+        {step === 3 ? <ReviewStep customer={customer} service={service} amount={amount} date={date} description={description} onEdit={goTo} requiresProductionConfirmation={requiresProductionConfirmation} productionConfirmed={productionConfirmed} onConfirm={setProductionConfirmed} /> : null}
+        {step === 4 ? <ProcessingState /> : null}
+        {step < 4 ? <IssuanceActions step={step} canContinue={canContinue} submitting={submitting} requiresProductionConfirmation={requiresProductionConfirmation} productionConfirmed={productionConfirmed} onBack={() => goTo((step - 1) as ClientIssuanceStep)} onContinue={() => goTo((step + 1) as ClientIssuanceStep)} onIssue={issue} /> : null}
       </form>
-      <aside className="v2-issue-summary"><div className="v2-panel-heading"><div><h2>Resumo da emissão</h2><p>Confira os dados antes de emitir.</p></div></div><dl>
-        <div><dt>Tomador</dt><dd>{customer?.legalName ?? "Selecione um tomador"}</dd></div>
-        <div><dt>Serviço</dt><dd>{service?.name ?? "Selecione um serviço"}</dd></div>
-        <div><dt>Data</dt><dd>{date ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${date}T12:00:00`)) : "—"}</dd></div>
-        <div><dt>Descrição</dt><dd>{description || "—"}</dd></div>
-        <div className="total"><dt>Valor total</dt><dd>{amount ? `R$ ${amount}` : "R$ 0,00"}</dd></div>
-      </dl>{preview ? <p className="v2-review-ready"><Check size={16} />Dados revisados. A nota está pronta para envio.</p> : <p className="v2-summary-hint">Preencha os campos para avançar à revisão.</p>}</aside>
+      <IssuanceSummary customer={customer} service={service} amount={amount} date={date} description={description} showOnMobile={step === 3} />
     </div>
   </section>;
+}
+
+function RecipientStep({ customers, selectedCustomerId, onChange }: { customers: IssueCustomer[]; selectedCustomerId: string; onChange: (value: string) => void }) {
+  return <section className="issuance-step"><span className="issuance-kicker">Etapa 1</span><h2>Tomador</h2><p>Quem receberá esta nota?</p>{customers.length ? <label className="field"><span>Tomador do serviço</span><select className="input" id="customer" value={selectedCustomerId} onChange={(event) => onChange(event.target.value)}>{customers.map((item) => <option value={item.id} key={item.id}>{item.legalName}{item.taxId ? ` — ${item.taxId}` : ""}</option>)}</select></label> : <div className="v2-inline-empty"><div><strong>Nenhum tomador cadastrado.</strong><p>Cadastre um tomador sem perder os dados desta emissão.</p></div><Link className="button secondary" href="/app/tomadores"><UserPlus size={17} aria-hidden />Novo tomador</Link></div>}</section>;
+}
+
+function ServiceStep({ services, selectedServiceId, onChange, catalogEnabled, onCatalogReady }: { services: IssueService[]; selectedServiceId: string; onChange: (value: string) => void; catalogEnabled: boolean; onCatalogReady: (service: IssueService) => void }) {
+  return <section className="issuance-step issuance-service-step"><span className="issuance-kicker">Etapa 2</span><h2>Serviço</h2><p>Qual serviço foi prestado?</p>
+    <section className="issuance-service-company" aria-labelledby="company-services-heading"><div><span>Serviços da empresa</span><strong id="company-services-heading">Usados pela sua empresa</strong></div>{services.length ? <label className="field"><span className="sr-only">Serviço já configurado</span><select className="input" id="service" value={selectedServiceId} onChange={(event) => onChange(event.target.value)}><option value="">Selecione um serviço</option>{services.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label> : <p>Nenhum serviço configurado ainda. Você pode procurar no catálogo oficial abaixo.</p>}</section>
+    {catalogEnabled ? <IssuanceCatalog onReady={onCatalogReady} /> : null}
+  </section>;
+}
+
+function IssuanceCatalog({ onReady }: { onReady: (service: IssueService) => void }) {
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [items, setItems] = useState<CatalogItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const response = await fetch(`/api/services/catalog?q=${encodeURIComponent(query)}&page=${page}`, { signal: controller.signal });
+        const result = await response.json() as { services?: CatalogItem[]; total?: number; hasMore?: boolean; error?: string };
+        if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar o catálogo.");
+        const next = result.services ?? [];
+        setItems((current) => mergeCatalogPage(current, next, page));
+        setTotal(result.total ?? 0);
+        setHasMore(Boolean(result.hasMore));
+      } catch (cause) {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Não foi possível carregar o catálogo.");
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 200);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [page, query]);
+
+  async function add(item: CatalogItem) {
+    setAdding(item.id);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-catalog", nationalServiceCodeId: item.id }) });
+      const result = await response.json() as CatalogServiceResult;
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível selecionar o serviço.");
+      setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, added: true } : currentItem));
+      const outcome = getCatalogSelectionOutcome(result);
+      if (outcome.ready && result.service?.id && result.service?.name) {
+        onReady({ id: result.service.id, name: result.service.name, defaultDescription: result.service.default_description });
+        setMessage(outcome.message);
+        return;
+      }
+      setMessage(outcome.message);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível selecionar o serviço.");
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  return <section className="issuance-catalog" aria-labelledby="catalog-heading"><div className="issuance-catalog-heading"><div><span>Catálogo completo</span><strong id="catalog-heading">Encontre o serviço prestado</strong></div><small>{total} opções disponíveis</small></div><label className="issuance-catalog-search"><span className="sr-only">Buscar serviço pelo nome ou descrição</span><Search size={17} aria-hidden /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Buscar serviço pelo nome ou descrição" /></label>{error ? <p className="alert error" role="alert">{error}</p> : null}{message ? <p className="issuance-catalog-message" role="status">{message}{message.includes("configuração") ? <> <Link href="/app/servicos">Ver serviço</Link></> : null}</p> : null}<div className="issuance-catalog-list">{items.map((item) => <div key={item.id} className="issuance-catalog-row"><p>{item.description}</p><button className="button secondary compact" type="button" disabled={item.added || adding === item.id} onClick={() => add(item)}>{item.added ? "Adicionado" : adding === item.id ? "Adicionando…" : "Selecionar"}</button></div>)}{loading ? <p>Carregando opções…</p> : !items.length ? <p>Nenhum serviço encontrado. Tente uma busca diferente.</p> : null}</div><footer>{items.length ? `Mostrando ${items.length} de ${total} opções` : null}{hasMore ? <button className="text-button" type="button" disabled={loading} onClick={() => setPage((value) => value + 1)}>Mostrar mais serviços <ChevronRight size={15} aria-hidden /></button> : null}</footer></section>;
+}
+
+function ValuesStep({ amount, date, description, onAmount, onDate, onDescription }: { amount: string; date: string; description: string; onAmount: (value: string) => void; onDate: (value: string) => void; onDescription: (value: string) => void }) {
+  return <section className="issuance-step"><span className="issuance-kicker">Etapa 3</span><h2>Valores</h2><p>Informe a data e o valor do serviço.</p><div className="issuance-value-grid"><label className="field"><span>Data da prestação</span><input className="input" id="date" type="date" value={date} onChange={(event) => onDate(event.target.value)} /></label><label className="field issuance-amount"><span>Valor</span><div className="money-input"><span>R$</span><input className="input" id="amount" inputMode="decimal" value={amount} placeholder="0,00" onChange={(event) => onAmount(event.target.value)} /></div></label></div><label className="field"><span>Descrição</span><textarea className="input" id="description" value={description} maxLength={1000} onChange={(event) => onDescription(event.target.value)} /></label></section>;
+}
+
+function ReviewStep({ customer, service, amount, date, description, onEdit, requiresProductionConfirmation, productionConfirmed, onConfirm }: { customer?: IssueCustomer; service?: IssueService; amount: string; date: string; description: string; onEdit: (step: ClientIssuanceStep) => void; requiresProductionConfirmation: boolean; productionConfirmed: boolean; onConfirm: (value: boolean) => void }) {
+  return <section className="issuance-step issuance-review"><span className="issuance-kicker">Etapa 4</span><h2>Revisão</h2><p>Confira os dados antes de emitir.</p><dl><div><dt>Tomador</dt><dd><strong>{customer?.legalName ?? "Não informado"}</strong>{customer?.taxId ? <small>{customer.taxId}</small> : null}</dd><button type="button" onClick={() => onEdit(0)}>Editar</button></div><div><dt>Serviço</dt><dd><strong>{service?.name ?? "Não informado"}</strong><small>{service?.defaultDescription ?? ""}</small></dd><button type="button" onClick={() => onEdit(1)}>Editar</button></div><div><dt>Data da prestação</dt><dd><strong>{formatDate(date)}</strong></dd></div><div><dt>Valor</dt><dd className="issuance-review-total"><strong>{formatAmount(amount)}</strong></dd></div><div><dt>Descrição</dt><dd><strong>{description || "Não informado"}</strong></dd><button type="button" onClick={() => onEdit(2)}>Editar</button></div></dl>{requiresProductionConfirmation ? <section className="alert warning issuance-production-confirmation" aria-label="Confirmação de Produção"><strong>AMBIENTE: PRODUÇÃO</strong><p>Esta NFS-e terá validade fiscal.</p><label><input type="checkbox" checked={productionConfirmed} onChange={(event) => onConfirm(event.target.checked)} /> Confirmo a revisão desta operação e autorizo a emissão em Produção.</label></section> : null}</section>;
+}
+
+function IssuanceActions({ step, canContinue, submitting, requiresProductionConfirmation, productionConfirmed, onBack, onContinue, onIssue }: { step: ClientIssuanceStep; canContinue: boolean; submitting: boolean; requiresProductionConfirmation: boolean; productionConfirmed: boolean; onBack: () => void; onContinue: () => void; onIssue: () => void }) {
+  const finalReview = step === 3;
+  return <footer className="issuance-actions">{step > 0 ? <button className="button secondary" type="button" disabled={submitting} onClick={onBack}><ChevronLeft size={18} aria-hidden />Voltar</button> : <span />}{finalReview ? <button className="button primary" type="button" disabled={!canContinue || submitting || (requiresProductionConfirmation && !productionConfirmed)} onClick={onIssue}><Send size={18} aria-hidden />Emitir NFS-e</button> : <button className="button primary" type="button" disabled={!canContinue || submitting} onClick={onContinue}>Continuar<ChevronRight size={18} aria-hidden /></button>}</footer>;
+}
+
+function IssuanceSummary({ customer, service, amount, date, description, showOnMobile }: { customer?: IssueCustomer; service?: IssueService; amount: string; date: string; description: string; showOnMobile: boolean }) {
+  return <aside className={`issuance-summary${showOnMobile ? " show-mobile" : ""}`}><div><span>Prévia</span><h2>Resumo da nota</h2></div><dl><div><dt>Tomador</dt><dd>{customer?.legalName ?? "Não informado"}</dd></div><div><dt>Serviço</dt><dd>{service?.name ?? "Não informado"}</dd></div><div><dt>Data</dt><dd>{formatDate(date)}</dd></div><div className="total"><dt>Valor</dt><dd>{formatAmount(amount)}</dd></div></dl>{description ? <p>{description}</p> : null}</aside>;
+}
+
+function ProcessingState() { return <section className="issuance-processing" role="status" aria-live="polite"><span><LoaderCircle className="spin" size={24} aria-hidden /></span><div><h2>Emitindo sua NFS-e…</h2><p>Isso pode levar alguns segundos.</p></div></section>; }
+
+function IssuanceResult({ result, customer, amount, mock, onAgain }: { result: Result; customer?: IssueCustomer; amount: string; mock: boolean; onAgain: () => void }) {
+  const presentation = getInvoicePresentation(result.status, result.safeMessage);
+  const detailHref = result.invoiceId && !mock ? `/app/notas/${result.invoiceId}` : null;
+  return <section className={`issuance-result is-${presentation.tone}`} role="status" aria-live="polite"><span><FileCheck2 size={26} aria-hidden /></span><div><p className="issuance-kicker">Resultado da emissão</p><h2>{presentation.title}</h2><p>{presentation.description}</p>{result.status === "ISSUED" ? <dl><div><dt>Número da nota</dt><dd>{result.nfseNumber ?? "Disponível na nota emitida"}</dd></div><div><dt>Tomador</dt><dd>{customer?.legalName ?? "Não informado"}</dd></div><div><dt>Valor</dt><dd>{formatAmount(amount)}</dd></div></dl> : null}{result.status === "UNKNOWN" ? <p className="issuance-result-note">Você pode sair desta tela. A nota continuará sendo acompanhada pelo sistema.</p> : null}<div className="issuance-result-actions">{detailHref ? <Link className="button primary" href={detailHref}>Ver nota</Link> : null}{detailHref && result.status === "ISSUED" ? <><a className="button secondary" href={`/api/invoices/${result.invoiceId}/artifacts/PDF`}>Baixar PDF</a><a className="button secondary" href={`/api/invoices/${result.invoiceId}/artifacts/NFSE_XML`}>Baixar XML</a></> : null}{result.status === "UNKNOWN" && detailHref ? <Link className="button secondary" href={detailHref}>Acompanhar situação</Link> : null}{result.status !== "UNKNOWN" ? <button className="button secondary" type="button" onClick={onAgain}>Emitir outra NFS-e</button> : null}</div></div></section>;
 }

@@ -26,10 +26,8 @@ export default async function IssuePage() {
           "id,name,default_description,active,workflow_status,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by",
         )
         .eq("organization_id", session.organizationId)
-        .eq("workflow_status", "REVIEWED")
+        .in("workflow_status", ["REVIEWED", "AUTO_READY"])
         .eq("active", true)
-        .not("reviewed_at", "is", null)
-        .not("reviewed_by", "is", null)
         .order("name"),
     ]);
 
@@ -48,9 +46,9 @@ export default async function IssuePage() {
       {demoMock && <MockBanner />}
       <PageHeader
         title="Emitir NFS-e"
-        description="Preencha os dados da operação. A configuração fiscal permanece protegida no backend."
+        description="Preencha os dados da nota em poucos passos."
       />
-      <IssueForm customers={customers} services={services} mock={demoMock} requiresProductionConfirmation={process.env.NFSE_ENV?.toLowerCase() === "production"} />
+      <IssueForm customers={customers} services={services} mock={demoMock} catalogEnabled={!demoMock} requiresProductionConfirmation={process.env.NFSE_ENV?.toLowerCase() === "production"} />
     </div>
   );
 }
