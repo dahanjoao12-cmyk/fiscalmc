@@ -12,12 +12,15 @@ import {
   type ClientServiceRecord,
   type ServiceWorkflowStatus,
 } from "@/lib/services/workflow";
+import { getServiceReadiness } from "@/lib/nfse/service-readiness";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const clientServiceSelect = "id,name,default_description,client_service_location,client_note,needs_info_message,workflow_status,submitted_at,created_at,updated_at";
 const internalServiceSelect = `${clientServiceSelect},active,reviewed_at,reviewed_by`;
+const catalogServiceSchema = z.object({ action: z.literal("add-catalog"), nationalServiceCodeId: z.uuid() });
+const reusableFiscalFields = "national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,active,workflow_status,reviewed_at,reviewed_by";
 
 function clientServiceResponse(service: Record<string, unknown>) {
   return {
@@ -58,8 +61,39 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireClientSession();
-    const input = clientServiceFieldsSchema.parse(await request.json());
+    const body: unknown = await request.json();
+    const catalogInput = catalogServiceSchema.safeParse(body);
     const db = createAdminClient();
+    if (catalogInput.success) {
+      const { data: catalog } = await db.from("national_service_codes").select("id,code,description").eq("id", catalogInput.data.nationalServiceCodeId).eq("active", true).maybeSingle();
+      if (!catalog) return NextResponse.json({ error: "Serviço do catálogo não encontrado." }, { status: 404 });
+      const { data: duplicate } = await db.from("service_templates").select(clientServiceSelect).eq("organization_id", session.organizationId).eq("national_service_code_id", catalog.id).maybeSingle();
+      if (duplicate) return NextResponse.json({ service: duplicate, duplicate: true });
+      const { data: proven } = await db.from("service_templates").select(reusableFiscalFields)
+        .eq("organization_id", session.organizationId).eq("national_tax_code", catalog.code).in("workflow_status", ["REVIEWED", "AUTO_READY"]).eq("active", true).limit(1).maybeSingle();
+      const reusable = proven && getServiceReadiness(proven).ready ? proven : null;
+      const now = new Date().toISOString();
+      const values = reusable ? {
+        ...reusable,
+        workflow_status: "AUTO_READY",
+        active: true,
+        reviewed_at: null,
+        reviewed_by: null,
+        auto_ready_at: now,
+        auto_ready_source: "ORGANIZATION_PROVEN_CONFIGURATION",
+      } : {
+        national_service_code_id: catalog.id,
+        national_tax_code: catalog.code,
+        workflow_status: "PENDING_REVIEW",
+        active: false,
+        submitted_at: now,
+      };
+      const { data, error } = await db.from("service_templates").insert({ organization_id: session.organizationId, name: catalog.description.slice(0, 160), default_description: catalog.description, created_by: session.userId, created_via: "CATALOG", ...values }).select(clientServiceSelect).single();
+      if (error || !data) throw error ?? new Error("CATALOG_SERVICE_CREATE_FAILED");
+      await db.from("audit_logs").insert({ organization_id: session.organizationId, actor_user_id: session.userId, actor_type: "CLIENT", action: reusable ? "client_catalog_service_auto_ready" : "client_catalog_service_needs_review", entity: "service_template", entity_id: data.id, safe_metadata: { source: "NATIONAL_SERVICE_CATALOG" } });
+      return NextResponse.json({ service: data, autoReady: Boolean(reusable) }, { status: 201 });
+    }
+    const input = clientServiceFieldsSchema.parse(body);
     const values = buildClientServiceCreate(input, session.userId);
     const { data, error } = await db.from("service_templates").insert({
       organization_id: session.organizationId,

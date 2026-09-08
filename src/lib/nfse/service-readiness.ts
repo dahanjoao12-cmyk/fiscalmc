@@ -45,11 +45,12 @@ export function getServiceTechnicalReadiness(service: ServiceReadinessInput) {
 export function getServiceReadiness(service: ServiceReadinessInput) {
   const technical = getServiceTechnicalReadiness(service);
   const missing = [...technical.missing];
-  if (service.workflow_status === "REVIEWED" && (!service.reviewed_at || !service.reviewed_by)) missing.push("Revisão fiscal");
-  if (service.workflow_status === "REVIEWED" && !service.active) missing.push("Serviço ativo");
-  const ready = service.workflow_status === "REVIEWED"
+  const officeReviewed = service.workflow_status === "REVIEWED";
+  const autoReady = service.workflow_status === "AUTO_READY";
+  if (officeReviewed && (!service.reviewed_at || !service.reviewed_by)) missing.push("Revisão fiscal");
+  if ((officeReviewed || autoReady) && !service.active) missing.push("Serviço ativo");
+  const ready = (officeReviewed && Boolean(service.reviewed_at && service.reviewed_by) || autoReady)
     && service.active
-    && Boolean(service.reviewed_at && service.reviewed_by)
     && technical.ready;
   return { status: service.workflow_status, missing, ready, technicalReady: technical.ready };
 }

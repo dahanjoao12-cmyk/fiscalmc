@@ -64,6 +64,10 @@ describe("service template readiness", () => {
     expect(getServiceReadiness({ ...complete, workflow_status: "NEEDS_INFO", active: false, reviewed_at: null, reviewed_by: null }).ready).toBe(false);
     expect(getServiceReadiness({ ...complete, workflow_status: "INACTIVE", active: false }).ready).toBe(false);
   });
+  it("permite AUTO_READY somente com a mesma configuração técnica completa", () => {
+    expect(getServiceReadiness({ ...complete, workflow_status: "AUTO_READY", reviewed_at: null, reviewed_by: null }).ready).toBe(true);
+    expect(getServiceReadiness({ ...complete, workflow_status: "AUTO_READY", reviewed_at: null, reviewed_by: null, dps_municipal_tax_code: null }).ready).toBe(false);
+  });
   it("só torna um serviço pronto quando ativo, revisado e auditável", () => {
     expect(getServiceReadiness(complete).ready).toBe(true);
     expect(getServiceReadiness({ ...complete, active: false }).ready).toBe(false);

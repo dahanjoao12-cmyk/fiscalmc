@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-export const serviceWorkflowStatuses = ["DRAFT", "PENDING_REVIEW", "NEEDS_INFO", "REVIEWED", "INACTIVE"] as const;
+export const serviceWorkflowStatuses = ["DRAFT", "PENDING_REVIEW", "NEEDS_INFO", "REVIEWED", "AUTO_READY", "INACTIVE"] as const;
 export type ServiceWorkflowStatus = (typeof serviceWorkflowStatuses)[number];
-export type ServiceCreatedVia = "CLIENT" | "OFFICE";
+export type ServiceCreatedVia = "CLIENT" | "OFFICE" | "CATALOG";
 
 export const clientServiceFieldsSchema = z.object({
   name: z.string().trim().min(2).max(160),
@@ -96,10 +96,11 @@ export function buildClientServiceSubmission(current: Pick<ClientServiceRecord, 
 
 export function getClientServiceStatusLabel(status: ServiceWorkflowStatus) {
   return ({
-    DRAFT: "Rascunho",
-    PENDING_REVIEW: "Em análise",
-    NEEDS_INFO: "Precisa de informação",
-    REVIEWED: "Pronto para emitir",
+    DRAFT: "Precisa de revisão",
+    PENDING_REVIEW: "Precisa de revisão",
+    NEEDS_INFO: "Precisa de revisão",
+    REVIEWED: "Disponível para emissão",
+    AUTO_READY: "Disponível para emissão",
     INACTIVE: "Inativo",
   } as const)[status];
 }
@@ -110,6 +111,10 @@ export function canClientEditService(status: ServiceWorkflowStatus) {
 
 export function canOfficeApproveService(status: ServiceWorkflowStatus, createdVia: ServiceCreatedVia) {
   return status === "PENDING_REVIEW" || (createdVia === "OFFICE" && status === "DRAFT");
+}
+
+export function isServiceAvailableForIssuance(status: ServiceWorkflowStatus, active: boolean) {
+  return active && (status === "REVIEWED" || status === "AUTO_READY");
 }
 
 export function buildOfficeServiceApproval(status: ServiceWorkflowStatus, createdVia: ServiceCreatedVia, now: string, reviewerUserId: string) {
