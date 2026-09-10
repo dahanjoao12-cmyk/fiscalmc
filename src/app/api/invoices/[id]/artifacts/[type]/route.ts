@@ -18,17 +18,16 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (!invoice) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
     if (type === "PDF") {
       let official = await downloadAuthorizedFiscalArtifact({ invoiceId: id, organizationId: session.organizationId, artifactType: "DANFSE_PDF", nfseNumber: invoice.nfse_number });
-      let danfseDebug: string | undefined;
       if (!official) {
         const recovery = await ensureArtifactsRecoveredBestEffort({ invoiceId: id, organizationId: session.organizationId, accessKey: invoice.access_key, environment: invoice.environment });
-        if (!recovery.ok) { danfseDebug = recovery.debug; logEvent("warn", "ARTIFACT_RECOVERY_FAILED", { invoiceId: id, artifactType: "DANFSE_PDF", reason: recovery.debug }); }
+        if (!recovery.ok) logEvent("warn", "ARTIFACT_RECOVERY_FAILED", { invoiceId: id, artifactType: "DANFSE_PDF", reason: recovery.debug });
         official = await downloadAuthorizedFiscalArtifact({ invoiceId: id, organizationId: session.organizationId, artifactType: "DANFSE_PDF", nfseNumber: invoice.nfse_number });
       }
       if (official) return new NextResponse(official.body, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${official.filename}"`, "Cache-Control": "private, no-store" } });
       const xml = await downloadAuthorizedFiscalArtifact({ invoiceId: id, organizationId: session.organizationId, artifactType: "NFSE_XML", nfseNumber: invoice.nfse_number });
       if (!xml) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
       const body = await buildAuthorizedNfseAuxiliaryPdf({ xml: new Uint8Array(await xml.body.arrayBuffer()), invoice: { nfseNumber: invoice.nfse_number, accessKey: invoice.access_key, serviceDate: invoice.service_date, amountCents: invoice.amount_cents, description: invoice.description } });
-      return new NextResponse(body, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="pdf-nota-${invoice.nfse_number ?? id}.pdf"`, "Cache-Control": "private, no-store", ...(danfseDebug ? { "X-Danfse-Debug": danfseDebug.replace(/[^\x20-\x7E]/g, "?").slice(0, 200) } : {}) } });
+      return new NextResponse(body, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="pdf-nota-${invoice.nfse_number ?? id}.pdf"`, "Cache-Control": "private, no-store" } });
     }
     let document = await downloadAuthorizedFiscalArtifact({ invoiceId: id, organizationId: session.organizationId, artifactType: type as FiscalArtifactType, nfseNumber: invoice.nfse_number });
     if (!document && type === "NFSE_XML") {
@@ -41,6 +40,6 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return new NextResponse(document.body, { headers: { "Content-Type": document.artifact.content_type, "Content-Disposition": `attachment; filename="${document.filename}"`, "Cache-Control": "private, no-store" } });
   } catch (error) {
     logEvent("error", "ARTIFACT_DOWNLOAD_FAILED", { error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
-    return NextResponse.json({ error: "Não foi possível baixar o documento agora.", debug: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }, { status: 500 });
+    return NextResponse.json({ error: "Não foi possível baixar o documento agora." }, { status: 500 });
   }
 }
