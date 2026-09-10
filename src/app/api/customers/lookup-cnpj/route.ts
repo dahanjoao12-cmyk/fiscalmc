@@ -38,14 +38,18 @@ export async function GET(request: Request) {
   let response: Response;
   try {
     response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`, { headers: { accept: "application/json" } });
-  } catch {
-    return NextResponse.json({ error: "Não foi possível consultar o CNPJ agora. Tente novamente." }, { status: 502 });
+  } catch (error) {
+    return NextResponse.json({ error: "Não foi possível consultar o CNPJ agora. Tente novamente.", debug: String(error) }, { status: 502 });
   }
   if (response.status === 404) return NextResponse.json({ error: "CNPJ não encontrado." }, { status: 404 });
-  if (!response.ok) return NextResponse.json({ error: "Não foi possível consultar o CNPJ agora. Tente novamente." }, { status: 502 });
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => "");
+    return NextResponse.json({ error: "Não foi possível consultar o CNPJ agora. Tente novamente.", debug: `status=${response.status} body=${bodyText.slice(0, 300)}` }, { status: 502 });
+  }
 
-  const parsed = brasilApiSchema.safeParse(await response.json());
-  if (!parsed.success) return NextResponse.json({ error: "Resposta inesperada da consulta de CNPJ." }, { status: 502 });
+  const rawBody = await response.json();
+  const parsed = brasilApiSchema.safeParse(rawBody);
+  if (!parsed.success) return NextResponse.json({ error: "Resposta inesperada da consulta de CNPJ.", debug: JSON.stringify(rawBody).slice(0, 300) }, { status: 502 });
 
   const municipalityCode = parsed.data.codigo_municipio_ibge ? String(parsed.data.codigo_municipio_ibge) : "";
   return NextResponse.json({
