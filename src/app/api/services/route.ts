@@ -12,7 +12,7 @@ import {
   type ClientServiceRecord,
   type ServiceWorkflowStatus,
 } from "@/lib/services/workflow";
-import { getServiceReadiness } from "@/lib/nfse/service-readiness";
+import { createServiceFromNationalCode } from "@/lib/services/catalog-linking";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 const clientServiceSelect = "id,name,default_description,client_service_location,client_note,needs_info_message,workflow_status,submitted_at,created_at,updated_at";
 const internalServiceSelect = `${clientServiceSelect},active,reviewed_at,reviewed_by`;
 const catalogServiceSchema = z.object({ action: z.literal("add-catalog"), nationalServiceCodeId: z.uuid(), organizationId: z.uuid() });
-const reusableFiscalFields = "national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,active,workflow_status,reviewed_at,reviewed_by";
+const secondaryActivitySchema = z.object({ action: z.literal("add-secondary"), nationalServiceCodeId: z.uuid() });
 
 function clientServiceResponse(service: Record<string, unknown>) {
   return {
@@ -65,56 +65,16 @@ export async function POST(request: Request) {
     const db = createAdminClient();
     if (catalogInput.success) {
       const office = await requireOfficeSession();
-      const organizationId = catalogInput.data.organizationId;
-      const { data: catalog } = await db.from("national_service_codes").select("id,code,description").eq("id", catalogInput.data.nationalServiceCodeId).eq("active", true).maybeSingle();
-      if (!catalog) return NextResponse.json({ error: "Serviço do catálogo não encontrado." }, { status: 404 });
-      const { data: duplicate } = await db.from("service_templates").select(clientServiceSelect).eq("organization_id", organizationId).eq("national_service_code_id", catalog.id).maybeSingle();
-      if (duplicate) return NextResponse.json({ service: duplicate, duplicate: true });
-      const { data: organization } = await db.from("organizations").select("municipality_code").eq("id", organizationId).maybeSingle();
-      let reusable: Record<string, unknown> | null = null;
-      let reuseSource: "ORGANIZATION_PROVEN_CONFIGURATION" | "MUNICIPALITY_PROVEN_CONFIGURATION" | null = null;
-      const { data: sameOrg } = await db.from("service_templates").select(reusableFiscalFields)
-        .eq("organization_id", organizationId).eq("national_tax_code", catalog.code).in("workflow_status", ["REVIEWED", "AUTO_READY"]).eq("active", true).limit(1).maybeSingle();
-      if (sameOrg && getServiceReadiness(sameOrg).ready) {
-        reusable = sameOrg;
-        reuseSource = "ORGANIZATION_PROVEN_CONFIGURATION";
-      } else if (organization?.municipality_code) {
-        // Municipal service classification (mapping, NBS code, ISS taxation) is a
-        // property of the service item and municipality, not of the taxpayer, so a
-        // configuration the office already reviewed for another company in the same
-        // municipality is safe evidence to reuse — this never fabricates a
-        // classification, it only widens whose prior human review counts as proof.
-        const { data: municipalityOrgs } = await db.from("organizations").select("id").eq("municipality_code", organization.municipality_code);
-        const municipalityOrgIds = (municipalityOrgs ?? []).map((item) => item.id);
-        if (municipalityOrgIds.length) {
-          const { data: sameMunicipality } = await db.from("service_templates").select(reusableFiscalFields)
-            .in("organization_id", municipalityOrgIds).eq("national_tax_code", catalog.code).in("workflow_status", ["REVIEWED", "AUTO_READY"]).eq("active", true).limit(1).maybeSingle();
-          if (sameMunicipality && getServiceReadiness(sameMunicipality).ready) {
-            reusable = sameMunicipality;
-            reuseSource = "MUNICIPALITY_PROVEN_CONFIGURATION";
-          }
-        }
-      }
-      const now = new Date().toISOString();
-      const values = reusable ? {
-        ...reusable,
-        workflow_status: "AUTO_READY",
-        active: true,
-        reviewed_at: null,
-        reviewed_by: null,
-        auto_ready_at: now,
-        auto_ready_source: reuseSource,
-      } : {
-        national_service_code_id: catalog.id,
-        national_tax_code: catalog.code,
-        workflow_status: "PENDING_REVIEW",
-        active: false,
-        submitted_at: now,
-      };
-      const { data, error } = await db.from("service_templates").insert({ organization_id: organizationId, name: catalog.description.slice(0, 160), default_description: catalog.description, created_by: office.userId, created_via: "CATALOG", ...values }).select(clientServiceSelect).single();
-      if (error || !data) throw error ?? new Error("CATALOG_SERVICE_CREATE_FAILED");
-      await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: office.userId, actor_type: "OFFICE", action: reusable ? "office_catalog_service_auto_ready" : "office_catalog_service_needs_review", entity: "service_template", entity_id: data.id, safe_metadata: { source: "NATIONAL_SERVICE_CATALOG" } });
-      return NextResponse.json({ service: data, autoReady: Boolean(reusable) }, { status: 201 });
+      const result = await createServiceFromNationalCode({ db, organizationId: catalogInput.data.organizationId, nationalServiceCodeId: catalogInput.data.nationalServiceCodeId, createdBy: office.userId, actorType: "OFFICE", allowAutoReady: true });
+      if ("error" in result) return NextResponse.json({ error: "Serviço do catálogo não encontrado." }, { status: 404 });
+      return NextResponse.json(result, { status: result.duplicate ? 200 : 201 });
+    }
+    const secondaryInput = secondaryActivitySchema.safeParse(body);
+    if (secondaryInput.success) {
+      const clientSession = await requireClientSession();
+      const result = await createServiceFromNationalCode({ db, organizationId: clientSession.organizationId, nationalServiceCodeId: secondaryInput.data.nationalServiceCodeId, createdBy: clientSession.userId, actorType: "CLIENT", allowAutoReady: false });
+      if ("error" in result) return NextResponse.json({ error: "Atividade não encontrada." }, { status: 404 });
+      return NextResponse.json(result, { status: result.duplicate ? 200 : 201 });
     }
     const session = await requireClientSession();
     const input = clientServiceFieldsSchema.parse(body);

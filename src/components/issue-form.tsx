@@ -11,7 +11,7 @@ export type IssueService = { id: string; name: string; defaultDescription?: stri
 type Props = { customers: IssueCustomer[]; services: IssueService[]; mock?: boolean; issuanceOrganizationId?: string; requiresProductionConfirmation?: boolean; catalogEnabled?: boolean };
 type Result = { status: "ISSUED" | "REJECTED" | "UNKNOWN"; invoiceId?: string; nfseNumber?: string | null; safeMessage: string };
 type CatalogItem = { id: string; description: string; added: boolean };
-type CatalogServiceResult = { service?: { id: string; name: string; default_description?: string | null; workflow_status?: string }; autoReady?: boolean; error?: string };
+type CatalogServiceResult = { service?: { id: string; name: string; default_description?: string | null; workflow_status?: string }; autoReady?: boolean; duplicate?: boolean; error?: string };
 
 function formatDate(value: string) { return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "Não informado"; }
 function formatAmount(value: string) { return value ? `R$ ${value}` : "R$ 0,00"; }
@@ -122,7 +122,56 @@ function ServiceStep({ services, selectedServiceId, onChange, catalogEnabled, on
   return <section className="issuance-step issuance-service-step"><span className="issuance-kicker">Etapa 2</span><h2>Serviço</h2><p>Qual serviço foi prestado?</p>
     <section className="issuance-service-company" aria-labelledby="company-services-heading"><div><span>Serviços da empresa</span><strong id="company-services-heading">Usados pela sua empresa</strong></div>{services.length ? <label className="field"><span className="sr-only">Serviço já configurado</span><select className="input" id="service" value={selectedServiceId} onChange={(event) => onChange(event.target.value)}><option value="">Selecione um serviço</option>{services.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label> : <p>{catalogEnabled ? "Nenhum serviço configurado ainda. Você pode procurar no catálogo oficial abaixo." : "Nenhum serviço configurado ainda. Peça ao escritório para liberar um serviço para emissão."}</p>}</section>
     {catalogEnabled && issuanceOrganizationId ? <IssuanceCatalog onReady={onCatalogReady} organizationId={issuanceOrganizationId} /> : null}
+    {!catalogEnabled ? <SecondaryActivities /> : null}
   </section>;
+}
+
+type SecondaryActivity = { cnae: string; cnaeDescription: string; nationalServiceCodeId: string; description: string; added: boolean };
+
+function SecondaryActivities() {
+  const [items, setItems] = useState<SecondaryActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/services/secondary-activities");
+        const result = await response.json() as { activities?: SecondaryActivity[]; error?: string };
+        if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar as atividades.");
+        if (!cancelled) setItems(result.activities ?? []);
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "Não foi possível carregar as atividades.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function add(item: SecondaryActivity) {
+    setAdding(item.nationalServiceCodeId);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-secondary", nationalServiceCodeId: item.nationalServiceCodeId }) });
+      const result = await response.json() as CatalogServiceResult;
+      if (!response.ok) throw new Error(result.error ?? "Não foi possível selecionar a atividade.");
+      setItems((current) => current.map((currentItem) => currentItem.nationalServiceCodeId === item.nationalServiceCodeId ? { ...currentItem, added: true } : currentItem));
+      setMessage(result.duplicate ? "Essa atividade já está cadastrada." : "Solicitação enviada para revisão do escritório.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível selecionar a atividade.");
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  if (loading) return null;
+  if (!items.length) return null;
+  return <section className="issuance-catalog" aria-labelledby="secondary-activities-heading"><div className="issuance-catalog-heading"><div><span>Atividades secundárias</span><strong id="secondary-activities-heading">Do seu CNPJ, ainda não usadas</strong></div></div>{error ? <p className="alert error" role="alert">{error}</p> : null}{message ? <p className="issuance-catalog-message" role="status">{message}</p> : null}<div className="issuance-catalog-list">{items.map((item) => <div key={item.nationalServiceCodeId} className="issuance-catalog-row"><p>{item.description}</p><button className="button secondary compact" type="button" disabled={item.added || adding === item.nationalServiceCodeId} onClick={() => add(item)}>{item.added ? "Solicitado" : adding === item.nationalServiceCodeId ? "Enviando…" : "Selecionar"}</button></div>)}</div></section>;
 }
 
 function IssuanceCatalog({ onReady, organizationId }: { onReady: (service: IssueService) => void; organizationId: string }) {
