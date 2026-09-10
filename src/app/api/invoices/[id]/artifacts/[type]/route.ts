@@ -39,7 +39,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (!document) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
     await createAdminClient().from("audit_logs").insert({ actor_user_id: session.userId, actor_type: session.role === "CLIENT_USER" ? "CLIENT" : "OFFICE", organization_id: session.organizationId, action: "artifact_downloaded", entity: "fiscal_artifact", entity_id: document.artifact.id, request_id: crypto.randomUUID(), safe_metadata: { type: document.artifact.artifact_type, invoiceId: id } });
     return new NextResponse(document.body, { headers: { "Content-Type": document.artifact.content_type, "Content-Disposition": `attachment; filename="${document.filename}"`, "Cache-Control": "private, no-store" } });
-  } catch {
-    return NextResponse.json({ error: "Não foi possível baixar o documento agora." }, { status: 500 });
+  } catch (error) {
+    logEvent("error", "ARTIFACT_DOWNLOAD_FAILED", { error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
+    return NextResponse.json({ error: "Não foi possível baixar o documento agora.", debug: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }, { status: 500 });
   }
 }
