@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireIssuanceContext, requireOfficeSession } from "@/lib/auth/session";
 import { recoverIssuedInvoiceArtifacts } from "@/lib/nfse/artifacts/recovery";
+import { SefinRestrictedReconciliationClient } from "@/lib/nfse/reconciliation/client";
 import { SafeFiscalError } from "@/lib/nfse/errors";
 import { can } from "@/lib/security/authorization";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -18,13 +19,13 @@ export async function POST(_request:Request,context:{params:Promise<{id:string}>
     const{id}=await context.params;
     if(!z.string().uuid().safeParse(id).success)return NextResponse.json({error:"Nota não encontrada."},{status:404});
     const db=createAdminClient();
-    const{data:invoice}=await db.from("invoices").select("id,organization_id,status,access_key,nfse_number,issued_at").eq("id",id).maybeSingle();
+    const{data:invoice}=await db.from("invoices").select("id,organization_id,status,access_key,nfse_number,issued_at,environment").eq("id",id).maybeSingle();
     if(!invoice)return NextResponse.json({error:"Nota não encontrada."},{status:404});
     const actor=await requireIssuanceContext(invoice.organization_id);
     if(actor.actorType!=="OFFICE")return NextResponse.json({error:"Acesso do escritório necessário."},{status:403});
     if(invoice.status!=="ISSUED"||!invoice.access_key)return NextResponse.json({error:"Esta NFS-e ainda não possui documento oficial disponível para recuperação."},{status:422});
 
-    const recovered=await recoverIssuedInvoiceArtifacts({invoiceId:invoice.id,organizationId:invoice.organization_id,accessKey:invoice.access_key});
+    const recovered=await recoverIssuedInvoiceArtifacts({invoiceId:invoice.id,organizationId:invoice.organization_id,accessKey:invoice.access_key,client:new SefinRestrictedReconciliationClient(undefined,invoice.environment??"PRODUCTION_RESTRICTED")});
     const{error:updateError}=await db.from("invoices").update({nfse_number:recovered.nfseNumber,issued_at:recovered.issuedAt??invoice.issued_at??new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",invoice.id).eq("organization_id",invoice.organization_id).eq("status","ISSUED");
     if(updateError)throw new Error("INVOICE_ARTIFACT_METADATA_PERSIST_FAILED");
     const{error:auditError}=await db.from("audit_logs").insert({actor_user_id:actor.actorUserId,actor_type:"OFFICE",organization_id:invoice.organization_id,action:"nfse_artifacts_recovered",entity:"invoice",entity_id:invoice.id,request_id:requestId,safe_metadata:{artifactTypes:recovered.recoveredTypes,danfseAvailable:recovered.danfseAvailable}});

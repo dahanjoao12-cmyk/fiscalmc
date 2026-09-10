@@ -22,6 +22,22 @@ import { reconcileUnknownInvoice } from "@/lib/nfse/reconciliation/service";
 import { reserveDpsNumber } from "@/lib/nfse/issuance/dps-reservation";
 import { issuanceFailureDiagnostic, type IssuanceStage } from "@/lib/nfse/issuance/request-diagnostics";
 import { getConfiguredNFSeEnvironment } from "@/lib/nfse/environments";
+import { persistOfficialArtifact } from "@/lib/nfse/artifacts/persistence";
+import { SefinRestrictedReconciliationClient } from "@/lib/nfse/reconciliation/client";
+import type { NFSeEnvironment } from "@/lib/nfse/types";
+
+/** Best-effort: the invoice is already validly issued regardless of whether this succeeds. */
+async function persistIssuedArtifactsBestEffort(input:{invoiceId:string;organizationId:string;environment:NFSeEnvironment;accessKey:string;officialXml:string}){
+  try{
+    await persistOfficialArtifact({invoiceId:input.invoiceId,organizationId:input.organizationId,artifactType:"NFSE_XML",content:Buffer.from(input.officialXml,"utf8"),contentType:"application/xml"});
+  }catch{ /* the official document remains retrievable later from SEFIN by access key */ }
+  if(process.env.NFSE_PROVIDER!=="national")return;
+  try{
+    const client=new SefinRestrictedReconciliationClient(undefined,input.environment);
+    const danfse=await client.getDanfseByAccessKey({organizationId:input.organizationId,accessKey:input.accessKey});
+    if(danfse)await persistOfficialArtifact({invoiceId:input.invoiceId,organizationId:input.organizationId,artifactType:"DANFSE_PDF",content:danfse.pdf,contentType:"application/pdf"});
+  }catch{ /* SEFIN may still be generating the DANFSe; a later retry can recover it */ }
+}
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -120,6 +136,7 @@ export async function POST(request:Request){
     if(submission.kind==="REPLAY")return responseForStored({id:invoice.id,status:submission.status},requestId);
     const result=submission.result;
     if(result.status==="REJECTED")return NextResponse.json({invoiceId:invoice.id,status:result.status,safeMessage:result.safeMessage},{status:422,headers:{"X-Request-ID":requestId}});
+    if(result.status==="ISSUED")await persistIssuedArtifactsBestEffort({invoiceId:invoice.id,organizationId:session.organizationId,environment:invoiceEnvironment,accessKey:result.accessKey,officialXml:result.officialXml});
     return NextResponse.json({status:result.status,invoiceId:invoice.id,...(result.status==="ISSUED"?{accessKey:result.accessKey,nfseNumber:result.nfseNumber}:{}),safeMessage:result.status==="UNKNOWN"?UNKNOWN_CLIENT_MESSAGE:"Nota emitida com sucesso."},{status:result.status==="UNKNOWN"?202:201,headers:{"X-Request-ID":requestId}});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Revise os dados informados.",fields:error.flatten().fieldErrors},{status:400,headers:{"X-Request-ID":requestId}});
