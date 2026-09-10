@@ -5,6 +5,7 @@ import { ensureArtifactsRecoveredBestEffort } from "@/lib/nfse/artifacts/recover
 import { fiscalArtifactTypes, type FiscalArtifactType } from "@/lib/nfse/artifacts/model";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildAuthorizedNfseAuxiliaryPdf } from "@/lib/nfse/artifacts/auxiliary-pdf";
+import { logEvent } from "@/lib/observability/logger";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (type === "PDF") {
       let official = await downloadAuthorizedFiscalArtifact({ invoiceId: id, organizationId: session.organizationId, artifactType: "DANFSE_PDF", nfseNumber: invoice.nfse_number });
       if (!official) {
-        await ensureArtifactsRecoveredBestEffort({ invoiceId: id, organizationId: session.organizationId, accessKey: invoice.access_key, environment: invoice.environment });
+        const recovery = await ensureArtifactsRecoveredBestEffort({ invoiceId: id, organizationId: session.organizationId, accessKey: invoice.access_key, environment: invoice.environment });
+        if (!recovery.ok) logEvent("warn", "ARTIFACT_RECOVERY_FAILED", { invoiceId: id, artifactType: "DANFSE_PDF", reason: recovery.debug });
         official = await downloadAuthorizedFiscalArtifact({ invoiceId: id, organizationId: session.organizationId, artifactType: "DANFSE_PDF", nfseNumber: invoice.nfse_number });
       }
       if (official) return new NextResponse(official.body, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${official.filename}"`, "Cache-Control": "private, no-store" } });
@@ -28,13 +30,12 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
       return new NextResponse(body, { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="pdf-nota-${invoice.nfse_number ?? id}.pdf"`, "Cache-Control": "private, no-store" } });
     }
     let document = await downloadAuthorizedFiscalArtifact({ invoiceId: id, organizationId: session.organizationId, artifactType: type as FiscalArtifactType, nfseNumber: invoice.nfse_number });
-    let recoveryDebug: string | undefined;
     if (!document && type === "NFSE_XML") {
       const recovery = await ensureArtifactsRecoveredBestEffort({ invoiceId: id, organizationId: session.organizationId, accessKey: invoice.access_key, environment: invoice.environment });
-      if (!recovery.ok) recoveryDebug = recovery.debug;
+      if (!recovery.ok) logEvent("warn", "ARTIFACT_RECOVERY_FAILED", { invoiceId: id, artifactType: type, reason: recovery.debug });
       document = await downloadAuthorizedFiscalArtifact({ invoiceId: id, organizationId: session.organizationId, artifactType: type as FiscalArtifactType, nfseNumber: invoice.nfse_number });
     }
-    if (!document) return NextResponse.json({ error: "Documento não encontrado.", debug: recoveryDebug }, { status: 404 });
+    if (!document) return NextResponse.json({ error: "Documento não encontrado." }, { status: 404 });
     await createAdminClient().from("audit_logs").insert({ actor_user_id: session.userId, actor_type: session.role === "CLIENT_USER" ? "CLIENT" : "OFFICE", organization_id: session.organizationId, action: "artifact_downloaded", entity: "fiscal_artifact", entity_id: document.artifact.id, request_id: crypto.randomUUID(), safe_metadata: { type: document.artifact.artifact_type, invoiceId: id } });
     return new NextResponse(document.body, { headers: { "Content-Type": document.artifact.content_type, "Content-Disposition": `attachment; filename="${document.filename}"`, "Cache-Control": "private, no-store" } });
   } catch {
