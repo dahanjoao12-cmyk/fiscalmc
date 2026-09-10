@@ -46,9 +46,12 @@ export async function recoverIssuedInvoiceArtifacts(input:{invoiceId:string;orga
  * instead of requiring a separate manual step. Never throws: the caller falls
  * back to whatever is already available (or a 404) when this can't help.
  */
-export async function ensureArtifactsRecoveredBestEffort(input:{invoiceId:string;organizationId:string;accessKey:string|null;environment:NFSeEnvironment|null}){
-  if(!input.accessKey)return;
+export async function ensureArtifactsRecoveredBestEffort(input:{invoiceId:string;organizationId:string;accessKey:string|null;environment:NFSeEnvironment|null}):Promise<{ok:true}|{ok:false;debug:string}>{
+  if(!input.accessKey)return{ok:false,debug:"NO_ACCESS_KEY"};
   try{
     await recoverIssuedInvoiceArtifacts({invoiceId:input.invoiceId,organizationId:input.organizationId,accessKey:input.accessKey,client:new SefinRestrictedReconciliationClient(undefined,input.environment??"PRODUCTION_RESTRICTED")});
-  }catch{ /* best-effort */ }
+    return{ok:true};
+  }catch(error){
+    return{ok:false,debug:error instanceof Error?`${error.name}: ${error.message}`:String(error)};
+  }
 }
