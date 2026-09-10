@@ -8,9 +8,31 @@ type Customer = {
   person_type: "INDIVIDUAL" | "COMPANY" | "FOREIGN";
   tax_id: string | null;
   legal_name: string;
+  email?: string | null;
+  phone?: string | null;
+  postal_code?: string | null;
+  street?: string | null;
+  address_number?: string | null;
+  address_complement?: string | null;
+  neighborhood?: string | null;
+  municipality_code?: string | null;
+  state?: string | null;
 };
 
-const blank = { personType: "COMPANY" as Customer["person_type"], legalName: "", taxId: "" };
+const blank = {
+  personType: "COMPANY" as Customer["person_type"],
+  legalName: "",
+  taxId: "",
+  email: "",
+  phone: "",
+  postalCode: "",
+  street: "",
+  addressNumber: "",
+  addressComplement: "",
+  neighborhood: "",
+  municipalityCode: "",
+  state: "",
+};
 
 export function CustomerManager() {
   const [rows, setRows] = useState<Customer[]>([]);
@@ -21,6 +43,8 @@ export function CustomerManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [form, setForm] = useState(blank);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupNotice, setLookupNotice] = useState("");
 
   async function load(search = "") {
     setLoading(true);
@@ -46,12 +70,65 @@ export function CustomerManager() {
     setOpen(false);
     setEditingId(null);
     setForm(blank);
+    setLookupNotice("");
   }
 
   function edit(customer: Customer) {
     setEditingId(customer.id);
-    setForm({ personType: customer.person_type, legalName: customer.legal_name, taxId: customer.tax_id ?? "" });
+    setLookupNotice("");
+    setForm({
+      personType: customer.person_type,
+      legalName: customer.legal_name,
+      taxId: customer.tax_id ?? "",
+      email: customer.email ?? "",
+      phone: customer.phone ?? "",
+      postalCode: customer.postal_code ?? "",
+      street: customer.street ?? "",
+      addressNumber: customer.address_number ?? "",
+      addressComplement: customer.address_complement ?? "",
+      neighborhood: customer.neighborhood ?? "",
+      municipalityCode: customer.municipality_code ?? "",
+      state: customer.state ?? "",
+    });
     setOpen(true);
+  }
+
+  async function lookupCnpj() {
+    const cnpj = form.taxId.replace(/\D/g, "");
+    if (cnpj.length !== 14) return;
+    setLookingUp(true);
+    setLookupNotice("");
+    try {
+      const response = await fetch(`/api/customers/lookup-cnpj?cnpj=${cnpj}`);
+      const data = await response.json();
+      if (!response.ok) {
+        setLookupNotice(data.error ?? "Não foi possível consultar o CNPJ.");
+        return;
+      }
+      const found = data.customer;
+      setForm((current) => ({
+        ...current,
+        legalName: found.legalName || current.legalName,
+        email: found.email || current.email,
+        phone: found.phone || current.phone,
+        postalCode: found.postalCode || current.postalCode,
+        street: found.street || current.street,
+        addressNumber: found.addressNumber || current.addressNumber,
+        addressComplement: found.addressComplement || current.addressComplement,
+        neighborhood: found.neighborhood || current.neighborhood,
+        municipalityCode: found.municipalityCode || current.municipalityCode,
+        state: found.state || current.state,
+      }));
+      setLookupNotice(
+        found.situacaoCadastral && found.situacaoCadastral !== "ATIVA"
+          ? `Atenção: situação cadastral "${found.situacaoCadastral}".`
+          : "Dados preenchidos a partir do CNPJ. Revise antes de salvar.",
+      );
+    } catch {
+      setLookupNotice("Não foi possível consultar o CNPJ agora.");
+    } finally {
+      setLookingUp(false);
+    }
   }
 
   async function save(event: React.FormEvent) {
@@ -93,7 +170,30 @@ export function CustomerManager() {
         <div className="modal-header"><h2>{editingId ? "Editar tomador" : "Novo tomador"}</h2><button className="icon-button" type="button" onClick={close} aria-label="Fechar"><X /></button></div>
         <label>Tipo<select value={form.personType} onChange={event => setForm({ ...form, personType: event.target.value as Customer["person_type"] })}><option value="COMPANY">Pessoa jurídica</option><option value="INDIVIDUAL">Pessoa física</option><option value="FOREIGN">Estrangeiro</option></select></label>
         <label>Nome ou razão social<input required value={form.legalName} onChange={event => setForm({ ...form, legalName: event.target.value })} /></label>
-        <label>CPF ou CNPJ<input value={form.taxId} onChange={event => setForm({ ...form, taxId: event.target.value })} /></label>
+        <div className="v2-form-grid">
+          <label>CPF ou CNPJ<input value={form.taxId} onChange={event => setForm({ ...form, taxId: event.target.value })} /></label>
+          {form.personType === "COMPANY" && (
+            <label>&nbsp;<button className="button secondary" type="button" disabled={lookingUp || form.taxId.replace(/\D/g, "").length !== 14} onClick={lookupCnpj}>{lookingUp ? "Buscando…" : "Buscar CNPJ"}</button></label>
+          )}
+        </div>
+        {lookupNotice && <p className="alert">{lookupNotice}</p>}
+        <div className="v2-form-grid">
+          <label>E-mail<input type="email" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} /></label>
+          <label>Telefone<input value={form.phone} onChange={event => setForm({ ...form, phone: event.target.value })} /></label>
+        </div>
+        <label>Endereço<input value={form.street} onChange={event => setForm({ ...form, street: event.target.value })} /></label>
+        <div className="v2-form-grid">
+          <label>Número<input value={form.addressNumber} onChange={event => setForm({ ...form, addressNumber: event.target.value })} /></label>
+          <label>Complemento<input value={form.addressComplement} onChange={event => setForm({ ...form, addressComplement: event.target.value })} /></label>
+        </div>
+        <div className="v2-form-grid">
+          <label>Bairro<input value={form.neighborhood} onChange={event => setForm({ ...form, neighborhood: event.target.value })} /></label>
+          <label>CEP<input value={form.postalCode} onChange={event => setForm({ ...form, postalCode: event.target.value })} /></label>
+        </div>
+        <div className="v2-form-grid">
+          <label>Município (código IBGE)<input value={form.municipalityCode} onChange={event => setForm({ ...form, municipalityCode: event.target.value })} /></label>
+          <label>UF<input value={form.state} maxLength={2} onChange={event => setForm({ ...form, state: event.target.value.toUpperCase() })} /></label>
+        </div>
         <div className="form-actions"><button className="button secondary" type="button" onClick={close}>Cancelar</button><button className="button primary" disabled={saving}>{saving ? "Salvando…" : "Salvar tomador"}</button></div>
       </form>
     </div>}
