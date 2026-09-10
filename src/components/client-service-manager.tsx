@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, Clock3, MessageCircleWarning, Pencil, Plus, Send, X } from "lucide-react";
 import { StatusBadge, formatDateTime } from "@/components/ui-kit";
 import { getClientServiceStatusLabel, type ServiceWorkflowStatus } from "@/lib/services/workflow";
@@ -131,7 +131,6 @@ export function ClientServiceManager({ initialServices }: { initialServices: Cli
       <div><span className="eyebrow">SERVIÇOS DA EMPRESA</span><h2>Informe o serviço que você presta</h2><p>Cadastre as informações comerciais. A Moreira & Castro cuida da validação fiscal antes da primeira emissão.</p></div>
       <button className="button primary" type="button" onClick={openCreate}><Plus size={18} />Novo serviço</button>
     </section>
-    <ClientCatalog onAdded={replace} />
     {error && !open ? <p className="alert error">{error}</p> : null}
     <section className="v2-panel v2-client-services">
       <div className="v2-panel-heading"><div><h2>Meus serviços</h2><p>{services.length} serviço(s) cadastrado(s)</p></div></div>
@@ -154,43 +153,4 @@ export function ClientServiceManager({ initialServices }: { initialServices: Cli
       <div className="form-actions"><button className="button secondary" type="button" onClick={close}>Cancelar</button><button className="button primary" disabled={saving}>{saving ? "Salvando…" : "Salvar serviço"}<ArrowRight size={17} /></button></div>
     </form></div> : null}
   </>;
-}
-
-type CatalogItem = { id: string; description: string; added: boolean };
-function ClientCatalog({ onAdded }: { onAdded: (service: ClientService) => void }) {
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(0);
-  const [items, setItems] = useState<CatalogItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  useEffect(() => {
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      setLoading(true); setError("");
-      try {
-        const response = await fetch(`/api/services/catalog?q=${encodeURIComponent(query)}&page=${page}`, { signal: controller.signal });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar o catálogo.");
-        setItems((current) => page === 0 ? result.services : [...current, ...result.services.filter((item: CatalogItem) => !current.some((currentItem) => currentItem.id === item.id))]);
-        setTotal(result.total ?? 0); setHasMore(Boolean(result.hasMore));
-      } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Não foi possível carregar o catálogo."); }
-      finally { if (!controller.signal.aborted) setLoading(false); }
-    }, 200);
-    return () => { clearTimeout(timer); controller.abort(); };
-  }, [query, page]);
-  async function add(item: CatalogItem) {
-    setAdding(item.id); setError("");
-    try {
-      const response = await fetch("/api/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-catalog", nationalServiceCodeId: item.id }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Não foi possível adicionar o serviço.");
-      setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, added: true } : currentItem));
-      onAdded(result.service);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Não foi possível adicionar o serviço."); }
-    finally { setAdding(null); }
-  }
-  return <section className="v2-panel v2-client-catalog"><div className="v2-panel-heading"><div><span className="eyebrow">ADICIONAR SERVIÇO</span><h2>Encontre no catálogo o serviço que sua empresa presta.</h2></div><strong>{total} opções disponíveis</strong></div><label className="v2-search-field"><span className="sr-only">Buscar serviço por nome ou descrição</span><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Buscar serviço por nome ou descrição" /></label>{error ? <p className="alert error">{error}</p> : null}<div className="v2-catalog-list">{items.map((item) => <div key={item.id} className="v2-catalog-row"><p>{item.description}</p><button className="button secondary compact" type="button" disabled={item.added || adding === item.id} onClick={() => add(item)}>{item.added ? "Adicionado" : adding === item.id ? "Adicionando…" : "Adicionar"}</button></div>)}{loading ? <p className="v2-catalog-feedback">Carregando opções…</p> : !items.length ? <p className="v2-catalog-feedback">Nenhum serviço encontrado. Não encontrou o serviço? Descrever outro serviço.</p> : null}</div><footer>{items.length ? `Mostrando ${items.length} de ${total} opções` : null}{hasMore ? <button className="text-button" type="button" disabled={loading} onClick={() => setPage((value) => value + 1)}>Mostrar mais serviços →</button> : null}</footer></section>;
 }

@@ -48,7 +48,7 @@ export default async function IssuePage() {
         title="Emitir NFS-e"
         description="Preencha os dados da nota em poucos passos."
       />
-      <IssueForm customers={customers} services={services} mock={demoMock} catalogEnabled={!demoMock} requiresProductionConfirmation={process.env.NFSE_ENV?.toLowerCase() === "production"} />
+      <IssueForm customers={customers} services={services} mock={demoMock} catalogEnabled={false} requiresProductionConfirmation={process.env.NFSE_ENV?.toLowerCase() === "production"} />
     </div>
   );
 }

@@ -15,6 +15,13 @@ type CatalogServiceResult = { service?: { id: string; name: string; default_desc
 
 function formatDate(value: string) { return value ? new Intl.DateTimeFormat("pt-BR").format(new Date(`${value}T12:00:00`)) : "Não informado"; }
 function formatAmount(value: string) { return value ? `R$ ${value}` : "R$ 0,00"; }
+function maskCurrencyInput(raw: string) {
+  const digits = raw.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  if (!digits) return "";
+  const cents = digits.padStart(3, "0");
+  const integerPart = cents.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${integerPart},${cents.slice(-2)}`;
+}
 
 export function IssueForm({ customers, services, mock = false, issuanceOrganizationId, requiresProductionConfirmation = false, catalogEnabled = false }: Props) {
   const [availableServices, setAvailableServices] = useState(services);
@@ -96,7 +103,7 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
     <div className="issuance-layout">
       <form className="issuance-form" onSubmit={(event) => event.preventDefault()}>
         {step === 0 ? <RecipientStep customers={customers} selectedCustomerId={selectedCustomerId} onChange={(value) => changed(() => setCustomerId(value))} /> : null}
-        {step === 1 ? <ServiceStep services={availableServices} selectedServiceId={selectedServiceTemplateId} onChange={selectService} catalogEnabled={catalogEnabled} onCatalogReady={selectCatalogService} /> : null}
+        {step === 1 ? <ServiceStep services={availableServices} selectedServiceId={selectedServiceTemplateId} onChange={selectService} catalogEnabled={catalogEnabled} onCatalogReady={selectCatalogService} issuanceOrganizationId={issuanceOrganizationId} /> : null}
         {step === 2 ? <ValuesStep amount={amount} date={date} description={description} onAmount={(value) => changed(() => setAmount(value))} onDate={(value) => changed(() => setDate(value))} onDescription={(value) => changed(() => setDescription(value))} /> : null}
         {step === 3 ? <ReviewStep customer={customer} service={service} amount={amount} date={date} description={description} onEdit={goTo} requiresProductionConfirmation={requiresProductionConfirmation} productionConfirmed={productionConfirmed} onConfirm={setProductionConfirmed} /> : null}
         {step === 4 ? <ProcessingState /> : null}
@@ -111,14 +118,14 @@ function RecipientStep({ customers, selectedCustomerId, onChange }: { customers:
   return <section className="issuance-step"><span className="issuance-kicker">Etapa 1</span><h2>Tomador</h2><p>Quem receberá esta nota?</p>{customers.length ? <label className="field"><span>Tomador do serviço</span><select className="input" id="customer" value={selectedCustomerId} onChange={(event) => onChange(event.target.value)}>{customers.map((item) => <option value={item.id} key={item.id}>{item.legalName}{item.taxId ? ` — ${item.taxId}` : ""}</option>)}</select></label> : <div className="v2-inline-empty"><div><strong>Nenhum tomador cadastrado.</strong><p>Cadastre um tomador sem perder os dados desta emissão.</p></div><Link className="button secondary" href="/app/tomadores"><UserPlus size={17} aria-hidden />Novo tomador</Link></div>}</section>;
 }
 
-function ServiceStep({ services, selectedServiceId, onChange, catalogEnabled, onCatalogReady }: { services: IssueService[]; selectedServiceId: string; onChange: (value: string) => void; catalogEnabled: boolean; onCatalogReady: (service: IssueService) => void }) {
+function ServiceStep({ services, selectedServiceId, onChange, catalogEnabled, onCatalogReady, issuanceOrganizationId }: { services: IssueService[]; selectedServiceId: string; onChange: (value: string) => void; catalogEnabled: boolean; onCatalogReady: (service: IssueService) => void; issuanceOrganizationId?: string }) {
   return <section className="issuance-step issuance-service-step"><span className="issuance-kicker">Etapa 2</span><h2>Serviço</h2><p>Qual serviço foi prestado?</p>
-    <section className="issuance-service-company" aria-labelledby="company-services-heading"><div><span>Serviços da empresa</span><strong id="company-services-heading">Usados pela sua empresa</strong></div>{services.length ? <label className="field"><span className="sr-only">Serviço já configurado</span><select className="input" id="service" value={selectedServiceId} onChange={(event) => onChange(event.target.value)}><option value="">Selecione um serviço</option>{services.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label> : <p>Nenhum serviço configurado ainda. Você pode procurar no catálogo oficial abaixo.</p>}</section>
-    {catalogEnabled ? <IssuanceCatalog onReady={onCatalogReady} /> : null}
+    <section className="issuance-service-company" aria-labelledby="company-services-heading"><div><span>Serviços da empresa</span><strong id="company-services-heading">Usados pela sua empresa</strong></div>{services.length ? <label className="field"><span className="sr-only">Serviço já configurado</span><select className="input" id="service" value={selectedServiceId} onChange={(event) => onChange(event.target.value)}><option value="">Selecione um serviço</option>{services.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label> : <p>{catalogEnabled ? "Nenhum serviço configurado ainda. Você pode procurar no catálogo oficial abaixo." : "Nenhum serviço configurado ainda. Peça ao escritório para liberar um serviço para emissão."}</p>}</section>
+    {catalogEnabled && issuanceOrganizationId ? <IssuanceCatalog onReady={onCatalogReady} organizationId={issuanceOrganizationId} /> : null}
   </section>;
 }
 
-function IssuanceCatalog({ onReady }: { onReady: (service: IssueService) => void }) {
+function IssuanceCatalog({ onReady, organizationId }: { onReady: (service: IssueService) => void; organizationId: string }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -135,7 +142,7 @@ function IssuanceCatalog({ onReady }: { onReady: (service: IssueService) => void
       setLoading(true);
       setError("");
       try {
-        const response = await fetch(`/api/services/catalog?q=${encodeURIComponent(query)}&page=${page}`, { signal: controller.signal });
+        const response = await fetch(`/api/services/catalog?q=${encodeURIComponent(query)}&page=${page}&organizationId=${organizationId}`, { signal: controller.signal });
         const result = await response.json() as { services?: CatalogItem[]; total?: number; hasMore?: boolean; error?: string };
         if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar o catálogo.");
         const next = result.services ?? [];
@@ -149,14 +156,14 @@ function IssuanceCatalog({ onReady }: { onReady: (service: IssueService) => void
       }
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [page, query]);
+  }, [page, query, organizationId]);
 
   async function add(item: CatalogItem) {
     setAdding(item.id);
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-catalog", nationalServiceCodeId: item.id }) });
+      const response = await fetch("/api/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-catalog", nationalServiceCodeId: item.id, organizationId }) });
       const result = await response.json() as CatalogServiceResult;
       if (!response.ok) throw new Error(result.error ?? "Não foi possível selecionar o serviço.");
       setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, added: true } : currentItem));
@@ -178,7 +185,7 @@ function IssuanceCatalog({ onReady }: { onReady: (service: IssueService) => void
 }
 
 function ValuesStep({ amount, date, description, onAmount, onDate, onDescription }: { amount: string; date: string; description: string; onAmount: (value: string) => void; onDate: (value: string) => void; onDescription: (value: string) => void }) {
-  return <section className="issuance-step"><span className="issuance-kicker">Etapa 3</span><h2>Valores</h2><p>Informe a data e o valor do serviço.</p><div className="issuance-value-grid"><label className="field"><span>Data da prestação</span><input className="input" id="date" type="date" value={date} onChange={(event) => onDate(event.target.value)} /></label><label className="field issuance-amount"><span>Valor</span><div className="money-input"><span>R$</span><input className="input" id="amount" inputMode="decimal" value={amount} placeholder="0,00" onChange={(event) => onAmount(event.target.value)} /></div></label></div><label className="field"><span>Descrição</span><textarea className="input" id="description" value={description} maxLength={1000} onChange={(event) => onDescription(event.target.value)} /></label></section>;
+  return <section className="issuance-step"><span className="issuance-kicker">Etapa 3</span><h2>Valores</h2><p>Informe a data e o valor do serviço.</p><div className="issuance-value-grid"><label className="field"><span>Data da prestação</span><input className="input" id="date" type="date" value={date} onChange={(event) => onDate(event.target.value)} /></label><label className="field issuance-amount"><span>Valor</span><div className="money-input"><span>R$</span><input className="input" id="amount" inputMode="decimal" value={amount} placeholder="0,00" onChange={(event) => onAmount(maskCurrencyInput(event.target.value))} /></div></label></div><label className="field"><span>Descrição</span><textarea className="input" id="description" value={description} maxLength={1000} onChange={(event) => onDescription(event.target.value)} /></label></section>;
 }
 
 function ReviewStep({ customer, service, amount, date, description, onEdit, requiresProductionConfirmation, productionConfirmed, onConfirm }: { customer?: IssueCustomer; service?: IssueService; amount: string; date: string; description: string; onEdit: (step: ClientIssuanceStep) => void; requiresProductionConfirmation: boolean; productionConfirmed: boolean; onConfirm: (value: boolean) => void }) {
