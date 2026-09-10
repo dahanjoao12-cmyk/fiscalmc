@@ -47,7 +47,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
     tab === "services" ? db.from("national_service_codes").select("id", { count: "exact", head: true }) : Promise.resolve({ count: 0 }),
     tab === "issue" || isOverview ? db.from("customers").select("id,legal_name,tax_id").eq("organization_id", id).order("legal_name") : Promise.resolve({ data: [] }),
     needsCertificate && canReadCertificate ? db.from("digital_certificates").select("id,subject,issuer,serial,owner_tax_id,valid_from,valid_until,status,created_at").eq("organization_id", id).is("replaced_at", null).maybeSingle() : Promise.resolve({ data: null }),
-    needsAccess && canReadClientAccess ? createClientAccessService(db).getSummary(id) : Promise.resolve(null),
+    needsAccess && canReadClientAccess ? createClientAccessService(createAdminClient()).getSummary(id) : Promise.resolve(null),
     isOverview ? db.from("invoices").select("service_date,status").eq("organization_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const company = companyResult.data;
