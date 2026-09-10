@@ -4,6 +4,7 @@ import { requireOfficeSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const optionalText=(maximum:number)=>z.string().trim().max(maximum).optional().transform(value=>value||null);
+const cnaeSecundarioInput=z.object({code:z.string().regex(/^\d{7}$/),description:z.string().trim().min(1).max(250)});
 const organizationInput=z.object({
   legalName:z.string().trim().min(2).max(250),
   tradeName:optionalText(250),
@@ -17,10 +18,13 @@ const organizationInput=z.object({
   neighborhood:optionalText(120),
   state:z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).or(z.literal("")).transform(value=>value||null),
   email:z.string().trim().email().or(z.literal("")).transform(value=>value||null),
-  phone:optionalText(40)
+  phone:optionalText(40),
+  cnaeFiscalCode:z.string().regex(/^\d{7}$/).or(z.literal("")).transform(value=>value||null),
+  cnaeFiscalDescription:optionalText(250),
+  cnaesSecundarios:z.array(cnaeSecundarioInput).max(50).optional().default([])
 });
 type OrganizationInput=z.infer<typeof organizationInput>;
-function toOrganizationPayload(data:OrganizationInput){return{legal_name:data.legalName,trade_name:data.tradeName,tax_id:data.taxId,municipality_code:data.municipalityCode,municipal_registration:data.municipalRegistration,postal_code:data.postalCode,street:data.street,address_number:data.addressNumber,address_complement:data.addressComplement,neighborhood:data.neighborhood,state:data.state,email:data.email,phone:data.phone};}
+function toOrganizationPayload(data:OrganizationInput){return{legal_name:data.legalName,trade_name:data.tradeName,tax_id:data.taxId,municipality_code:data.municipalityCode,municipal_registration:data.municipalRegistration,postal_code:data.postalCode,street:data.street,address_number:data.addressNumber,address_complement:data.addressComplement,neighborhood:data.neighborhood,state:data.state,email:data.email,phone:data.phone,cnae_fiscal_code:data.cnaeFiscalCode,cnae_fiscal_description:data.cnaeFiscalDescription,cnaes_secundarios:data.cnaesSecundarios};}
 
 export async function POST(request:Request){
   try{

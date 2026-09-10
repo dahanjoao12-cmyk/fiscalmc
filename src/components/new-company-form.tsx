@@ -5,13 +5,14 @@ import { Building2, ChevronLeft, CircleAlert, LoaderCircle, MapPin, ShieldCheck 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+export type CnaeSecundario={code:string;description:string};
 export type CompanyFormState={
   legalName:string;tradeName:string;taxId:string;municipalRegistration:string;municipalityCode:string;
   postalCode:string;street:string;addressNumber:string;addressComplement:string;neighborhood:string;state:string;
-  email:string;phone:string;
+  email:string;phone:string;cnaeFiscalCode:string;cnaeFiscalDescription:string;cnaesSecundarios:CnaeSecundario[];
 };
 
-const initialForm:CompanyFormState={legalName:"",tradeName:"",taxId:"",municipalRegistration:"",municipalityCode:"",postalCode:"",street:"",addressNumber:"",addressComplement:"",neighborhood:"",state:"",email:"",phone:""};
+const initialForm:CompanyFormState={legalName:"",tradeName:"",taxId:"",municipalRegistration:"",municipalityCode:"",postalCode:"",street:"",addressNumber:"",addressComplement:"",neighborhood:"",state:"",email:"",phone:"",cnaeFiscalCode:"",cnaeFiscalDescription:"",cnaesSecundarios:[]};
 const states=["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
 function digits(value:string){return value.replace(/\D/g,"");}
@@ -25,7 +26,38 @@ export function NewCompanyForm({organizationId,initialValues}:{organizationId?:s
   const[form,setForm]=useState<CompanyFormState>({...initialForm,...initialValues});
   const[error,setError]=useState("");
   const[saving,setSaving]=useState(false);
+  const[lookingUp,setLookingUp]=useState(false);
+  const[lookupNotice,setLookupNotice]=useState("");
   const set=(field:keyof CompanyFormState,value:string)=>setForm(current=>({...current,[field]:value}));
+  async function lookupCnpj(){
+    const cnpj=digits(form.taxId);
+    if(cnpj.length!==14)return;
+    setLookingUp(true);setLookupNotice("");
+    try{
+      const response=await fetch(`/api/admin/organizations/lookup-cnpj?cnpj=${cnpj}`);
+      const data=await response.json();
+      if(!response.ok){setLookupNotice(data.error??"Não foi possível consultar o CNPJ.");return;}
+      const found=data.organization;
+      setForm(current=>({
+        ...current,
+        legalName:found.legalName||current.legalName,
+        email:found.email||current.email,
+        phone:found.phone?formatPhone(found.phone):current.phone,
+        postalCode:found.postalCode?formatCep(found.postalCode):current.postalCode,
+        street:found.street||current.street,
+        addressNumber:found.addressNumber||current.addressNumber,
+        addressComplement:found.addressComplement||current.addressComplement,
+        neighborhood:found.neighborhood||current.neighborhood,
+        municipalityCode:found.municipalityCode||current.municipalityCode,
+        state:found.state||current.state,
+        cnaeFiscalCode:found.cnaeFiscalCode||current.cnaeFiscalCode,
+        cnaeFiscalDescription:found.cnaeFiscalDescription||current.cnaeFiscalDescription,
+        cnaesSecundarios:found.cnaesSecundarios?.length?found.cnaesSecundarios:current.cnaesSecundarios,
+      }));
+      setLookupNotice(found.situacaoCadastral&&found.situacaoCadastral!=="ATIVA"?`Atenção: situação cadastral "${found.situacaoCadastral}".`:"Dados preenchidos a partir do CNPJ. Revise antes de salvar.");
+    }catch{setLookupNotice("Não foi possível consultar o CNPJ agora.");}
+    finally{setLookingUp(false);}
+  }
   async function save(event:React.FormEvent){
     event.preventDefault();
     setError("");
@@ -49,9 +81,24 @@ export function NewCompanyForm({organizationId,initialValues}:{organizationId?:s
           <Field label="Razão social" required htmlFor="legal-name" className="span-2"><input className="input" id="legal-name" required autoComplete="organization" value={form.legalName} onChange={event=>set("legalName",event.target.value)} placeholder="Ex.: Assessoria Contábil Moreira & Castro"/></Field>
           <Field label="Nome fantasia" htmlFor="trade-name" hint="Opcional"><input className="input" id="trade-name" value={form.tradeName} onChange={event=>set("tradeName",event.target.value)} placeholder="Como a empresa é conhecida"/></Field>
           <Field label="CNPJ" required htmlFor="tax-id" hint="Somente números ou CNPJ formatado"><input className="input" id="tax-id" required inputMode="numeric" autoComplete="off" value={form.taxId} onChange={event=>set("taxId",formatCnpj(event.target.value))} placeholder="00.000.000/0000-00"/></Field>
+          <Field label="&nbsp;" htmlFor="lookup-cnpj"><button className="button secondary" type="button" id="lookup-cnpj" disabled={lookingUp||digits(form.taxId).length!==14} onClick={lookupCnpj}>{lookingUp?"Buscando…":"Buscar CNPJ"}</button></Field>
           <Field label="Código IBGE do município" required htmlFor="municipality-code" hint="7 dígitos"><input className="input" id="municipality-code" required inputMode="numeric" value={form.municipalityCode} onChange={event=>set("municipalityCode",digits(event.target.value).slice(0,7))} placeholder="Ex.: 3304557"/></Field>
           <Field label="Inscrição municipal" htmlFor="municipal-registration" hint="Preencha quando confirmada"><input className="input" id="municipal-registration" value={form.municipalRegistration} onChange={event=>set("municipalRegistration",event.target.value)} placeholder="Número da inscrição municipal"/></Field>
         </div>
+        {lookupNotice&&<div className="alert" role="status">{lookupNotice}</div>}
+      </section>
+
+      <section className="company-form-section" aria-labelledby="company-cnae">
+        <div className="form-section-heading"><span className="form-section-icon"><Building2 size={20}/></span><div><h2 id="company-cnae">Atividades do CNPJ</h2><p>Preenchidas pela consulta do CNPJ. Ainda não determinam o serviço fiscal automaticamente.</p></div></div>
+        <div className="company-form-grid">
+          <Field label="CNAE principal" htmlFor="cnae-principal" className="span-2">
+            <input className="input" id="cnae-principal" readOnly value={form.cnaeFiscalCode?`${form.cnaeFiscalCode} — ${form.cnaeFiscalDescription}`:""} placeholder="Buscar CNPJ para preencher"/>
+          </Field>
+        </div>
+        {form.cnaesSecundarios.length>0&&<div className="cnae-secundarios-list">
+          <p className="field-hint">CNAEs secundários ({form.cnaesSecundarios.length})</p>
+          <ul>{form.cnaesSecundarios.map(item=><li key={item.code}><strong>{item.code}</strong> — {item.description}</li>)}</ul>
+        </div>}
       </section>
 
       <section className="company-form-section" aria-labelledby="company-address">
