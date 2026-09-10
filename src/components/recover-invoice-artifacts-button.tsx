@@ -4,12 +4,13 @@ import { Download } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function RecoverInvoiceArtifactsButton({invoiceId}:{invoiceId:string}){
+export function RecoverInvoiceArtifactsButton({invoiceId,scope="office"}:{invoiceId:string;scope?:"office"|"client"}){
   const router=useRouter();const[loading,setLoading]=useState(false);const[message,setMessage]=useState("");
   async function recover(){
     setLoading(true);setMessage("");
     try{
-      const response=await fetch(`/api/admin/invoices/${invoiceId}/artifacts/recover`,{method:"POST"});
+      const base=scope==="office"?"/api/admin/invoices":"/api/invoices";
+      const response=await fetch(`${base}/${invoiceId}/artifacts/recover`,{method:"POST"});
       const body=await response.json() as {error?:string;artifactTypes?:string[];danfseAvailable?:boolean};
       if(!response.ok){setMessage(body.error??"Não foi possível recuperar os documentos oficiais agora.");return;}
       setMessage(body.danfseAvailable?"XML e DANFSe oficiais foram recuperados.":"XML oficial recuperado. O DANFSe ainda não está disponível — a SEFIN pode levar alguns instantes para gerá-lo.");
