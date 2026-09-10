@@ -12,7 +12,7 @@ export function RecoverInvoiceArtifactsButton({invoiceId}:{invoiceId:string}){
       const response=await fetch(`/api/admin/invoices/${invoiceId}/artifacts/recover`,{method:"POST"});
       const body=await response.json() as {error?:string;artifactTypes?:string[];danfseAvailable?:boolean};
       if(!response.ok){setMessage(body.error??"Não foi possível recuperar os documentos oficiais agora.");return;}
-      setMessage(body.danfseAvailable?"XML e DANFSe oficiais foram recuperados.":"XML oficial recuperado. O DANFSe ainda não está disponível no ambiente restrito.");
+      setMessage(body.danfseAvailable?"XML e DANFSe oficiais foram recuperados.":"XML oficial recuperado. O DANFSe ainda não está disponível — a SEFIN pode levar alguns instantes para gerá-lo.");
       router.refresh();
     }catch{setMessage("Não foi possível recuperar os documentos oficiais agora.");}finally{setLoading(false);}
   }
