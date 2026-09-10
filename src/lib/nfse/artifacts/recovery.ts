@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { SefinRestrictedReconciliationClient } from "../reconciliation/client";
+import type { NFSeEnvironment } from "../types";
 import { persistOfficialArtifact } from "./persistence";
 
 const accessKeySchema=z.string().regex(/^\d{50}$/);
@@ -26,10 +27,28 @@ export async function recoverIssuedInvoiceArtifacts(input:{invoiceId:string;orga
   if(!nfse)throw new Error("OFFICIAL_NFSE_NOT_FOUND");
   const xmlArtifact=await persist({invoiceId:input.invoiceId,organizationId:input.organizationId,artifactType:"NFSE_XML",content:Buffer.from(nfse.xml,"utf8"),contentType:"application/xml"});
   const recoveredTypes:Array<"NFSE_XML"|"DANFSE_PDF">=[xmlArtifact.artifact_type as "NFSE_XML"];
-  const danfse=await client.getDanfseByAccessKey({organizationId:input.organizationId,accessKey});
-  if(danfse){
-    const pdfArtifact=await persist({invoiceId:input.invoiceId,organizationId:input.organizationId,artifactType:"DANFSE_PDF",content:danfse.pdf,contentType:danfse.contentType});
-    recoveredTypes.push(pdfArtifact.artifact_type as "DANFSE_PDF");
-  }
-  return{accessKey:nfse.accessKey,nfseNumber:nfse.nfseNumber,...(nfse.issuedAt?{issuedAt:nfse.issuedAt}:{}),recoveredTypes,danfseAvailable:Boolean(danfse)};
+  // The XML is already recovered at this point; a DANFSe failure (SEFIN still
+  // generating it, a transient error) must not undo that or fail the whole call.
+  let danfseAvailable=false;
+  try{
+    const danfse=await client.getDanfseByAccessKey({organizationId:input.organizationId,accessKey});
+    if(danfse){
+      const pdfArtifact=await persist({invoiceId:input.invoiceId,organizationId:input.organizationId,artifactType:"DANFSE_PDF",content:danfse.pdf,contentType:danfse.contentType});
+      recoveredTypes.push(pdfArtifact.artifact_type as "DANFSE_PDF");
+      danfseAvailable=true;
+    }
+  }catch{ /* best-effort; the XML recovery above still succeeds */ }
+  return{accessKey:nfse.accessKey,nfseNumber:nfse.nfseNumber,...(nfse.issuedAt?{issuedAt:nfse.issuedAt}:{}),recoveredTypes,danfseAvailable};
+}
+
+/**
+ * Used by the artifact download route so "Baixar PDF/XML" recovers on demand
+ * instead of requiring a separate manual step. Never throws: the caller falls
+ * back to whatever is already available (or a 404) when this can't help.
+ */
+export async function ensureArtifactsRecoveredBestEffort(input:{invoiceId:string;organizationId:string;accessKey:string|null;environment:NFSeEnvironment|null}){
+  if(!input.accessKey)return;
+  try{
+    await recoverIssuedInvoiceArtifacts({invoiceId:input.invoiceId,organizationId:input.organizationId,accessKey:input.accessKey,client:new SefinRestrictedReconciliationClient(undefined,input.environment??"PRODUCTION_RESTRICTED")});
+  }catch{ /* best-effort */ }
 }

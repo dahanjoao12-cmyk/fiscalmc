@@ -2,7 +2,6 @@ import { AlertTriangle, Building2, FileText, UserRound } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { InvoiceTimeline } from "@/components/invoice-timeline";
 import { ReconcileInvoiceButton } from "@/components/reconcile-invoice-button";
-import { RecoverInvoiceArtifactsButton } from "@/components/recover-invoice-artifacts-button";
 import { PageHeader, StatusBadge, formatCurrency, formatDate, formatDateTime } from "@/components/ui-kit";
 import { requireOfficeSession } from "@/lib/auth/session";
 import { getInvoicePresentation } from "@/lib/invoices/presentation";
@@ -20,7 +19,6 @@ export default async function AdminInvoiceDetail({ params }: { params: Promise<{
   if (!invoice) notFound();
   const presentation = getInvoicePresentation(invoice.status, invoice.safe_status_message);
   const latestAttempt = attempts?.[0];
-  const hasNfseXml = (artifacts ?? []).some((artifact) => artifact.artifact_type === "NFSE_XML");
   const hasDanfse = (artifacts ?? []).some((artifact) => artifact.artifact_type === "DANFSE_PDF");
   const organization=Array.isArray(invoice.organizations)?invoice.organizations[0]:invoice.organizations;
   const customer=Array.isArray(invoice.customers)?invoice.customers[0]:invoice.customers;
@@ -31,7 +29,7 @@ export default async function AdminInvoiceDetail({ params }: { params: Promise<{
     <div className="v2-document-grid"><section className="v2-panel v2-document-section"><h2><Building2 size={19} aria-hidden />Prestador</h2><dl><div><dt>Empresa</dt><dd>{organization?.legal_name ?? "—"}</dd></div><div><dt>CNPJ</dt><dd>{organization?.tax_id ?? "—"}</dd></div></dl></section><section className="v2-panel v2-document-section"><h2><UserRound size={19} aria-hidden />Tomador</h2><dl><div><dt>Nome</dt><dd>{customer?.legal_name ?? "—"}</dd></div><div><dt>CPF/CNPJ</dt><dd>{customer?.tax_id ?? "—"}</dd></div></dl></section></div>
     <section className="v2-panel v2-document-section"><h2><FileText size={19} aria-hidden />Serviço e valores</h2><dl className="columns"><div><dt>Serviço</dt><dd>{service?.name ?? "—"}</dd></div><div><dt>Valor</dt><dd className="document-total">{formatCurrency(invoice.amount_cents)}</dd></div><div><dt>Ambiente</dt><dd>{invoice.environment === "PRODUCTION_RESTRICTED" ? "Produção restrita" : "Produção"}</dd></div><div className="span"><dt>Descrição</dt><dd>{invoice.description}</dd></div>{invoice.access_key ? <div className="span"><dt>Chave de acesso</dt><dd className="break-all">{invoice.access_key}</dd></div> : null}</dl></section>
     <InvoiceTimeline office createdAt={invoice.created_at} status={invoice.status} issuedAt={invoice.issued_at} updatedAt={invoice.updated_at} lastReconciledAt={invoice.last_reconciled_at} attempts={(attempts ?? []).map((attempt) => ({ id: attempt.id, status: attempt.status, safeMessage: attempt.safe_error_message, startedAt: attempt.started_at, finishedAt: attempt.finished_at }))} />
-    {invoice.status === "ISSUED" ? <section className="v2-panel v2-document-section"><h2>Documentos</h2><div className="v2-document-actions">{hasNfseXml ? <><a className="button secondary" href={`/api/admin/invoices/${invoice.id}/artifacts/PDF`}>Baixar PDF</a><a className="button secondary" href={`/api/admin/invoices/${invoice.id}/artifacts/NFSE_XML`}>Baixar XML</a></> : null}{!hasNfseXml ? <RecoverInvoiceArtifactsButton invoiceId={invoice.id} /> : null}</div>{hasNfseXml&&!hasDanfse?<p className="v2-document-note">PDF gerado a partir dos dados autorizados da NFS-e.</p>:null}</section> : null}
+    {invoice.status === "ISSUED" ? <section className="v2-panel v2-document-section"><h2>Documentos</h2><div className="v2-document-actions"><a className="button secondary" href={`/api/admin/invoices/${invoice.id}/artifacts/PDF`}>Baixar PDF</a><a className="button secondary" href={`/api/admin/invoices/${invoice.id}/artifacts/NFSE_XML`}>Baixar XML</a></div>{!hasDanfse?<p className="v2-document-note">PDF gerado a partir dos dados autorizados da NFS-e, enquanto a SEFIN gera o DANFSe oficial.</p>:null}</section> : null}
     <details className="v2-panel v2-technical-details"><summary>Informações técnicas</summary><dl><div><dt>Invoice ID</dt><dd className="break-all">{invoice.id}</dd></div><div><dt>Status interno</dt><dd>{invoice.status}</dd></div><div><dt>Criada em</dt><dd>{formatDateTime(invoice.created_at)}</dd></div><div><dt>Atualizada em</dt><dd>{formatDateTime(invoice.updated_at)}</dd></div>{invoice.last_reconciled_at ? <div><dt>Última reconciliação</dt><dd>{formatDateTime(invoice.last_reconciled_at)}</dd></div> : null}{invoice.dps_identifier ? <div><dt>Identificador DPS</dt><dd className="break-all">{invoice.dps_identifier}</dd></div> : null}{latestAttempt ? <><div><dt>Tentativa mais recente</dt><dd>{latestAttempt.status}</dd></div><div><dt>Request ID</dt><dd className="break-all">{latestAttempt.request_id}</dd></div></> : null}</dl></details>
   </div>;
 }
