@@ -8,6 +8,9 @@ export const runtime = "nodejs";
 
 const optionalDpsCode = z.string().regex(/^\d{3}$/).optional().or(z.literal(""));
 const optionalMunicipality = z.string().regex(/^\d{7}$/).optional().or(z.literal(""));
+const optionalNbsCode = z.string().regex(/^\d{9}$/).optional().or(z.literal(""));
+const optionalIssTaxation = z.enum(["1", "2", "3", "4"]).optional().or(z.literal(""));
+const optionalIssRateSource = z.enum(["PARAMETRIZED_BY_NATIONAL", "EMITTER_PROVIDED"]).optional().or(z.literal(""));
 const serviceFields = {
   name: z.string().trim().min(2).max(160),
   defaultDescription: z.string().trim().max(1000).optional(),
@@ -16,6 +19,9 @@ const serviceFields = {
   dpsMunicipalTaxCode: optionalDpsCode,
   dpsMunicipalTaxCodeSource: z.string().trim().max(320).optional(),
   serviceLocationMunicipalityCode: optionalMunicipality,
+  nbsCode: optionalNbsCode,
+  issTaxation: optionalIssTaxation,
+  issRateSource: optionalIssRateSource,
   reviewNote: z.string().trim().max(1000).optional(),
 };
 const createSchema = z.object(serviceFields).strict();
@@ -78,6 +84,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       dps_municipal_tax_code: input.dpsMunicipalTaxCode || null,
       dps_municipal_tax_code_source: input.dpsMunicipalTaxCode ? input.dpsMunicipalTaxCodeSource || null : null,
       service_location_municipality_code: input.serviceLocationMunicipalityCode || null,
+      nbs_code: input.nbsCode || null,
+      iss_taxation: input.issTaxation || null,
+      iss_rate_source: input.issRateSource || null,
       review_note: input.reviewNote || null,
       active: false,
       workflow_status: "DRAFT",
@@ -132,6 +141,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       dps_municipal_tax_code: input.dpsMunicipalTaxCode || null,
       dps_municipal_tax_code_source: input.dpsMunicipalTaxCode ? input.dpsMunicipalTaxCodeSource || null : null,
       service_location_municipality_code: input.serviceLocationMunicipalityCode || null,
+      nbs_code: input.nbsCode || null,
+      iss_taxation: input.issTaxation || null,
+      iss_rate_source: input.issRateSource || null,
       review_note: input.reviewNote || null,
       ...reviewValues,
       updated_at: now,
