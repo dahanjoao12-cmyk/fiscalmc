@@ -313,6 +313,9 @@ textarea.input { min-height:108px; padding-top:14px; resize:vertical; }
 .button.ghost { color:var(--navy); background:transparent; }
 .button.compact { min-height:36px; padding:0 11px; font-size:12px; }
 .button:disabled { opacity:.48; }
+.v2-table-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.dismiss-pendency { display:flex; flex-direction:column; gap:4px; }
+.dismiss-pendency small[role="alert"] { color:#b3261e; font-size:11px; }
 .v2-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); border:1px solid var(--border); border-radius:9px; background:#fff; }
 .v2-metric { min-height:110px; padding:20px 22px; border-right:1px solid var(--border); display:grid; align-content:center; gap:7px; }
 .v2-metric:last-child { border:0; }

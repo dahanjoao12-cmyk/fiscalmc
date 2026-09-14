@@ -2,14 +2,18 @@ import Link from "next/link";
 import { ArrowRight, CircleAlert } from "lucide-react";
 import { redirect } from "next/navigation";
 import { EmptyState, PageHeader, StatusBadge, formatDateTime } from "@/components/ui-kit";
+import { DismissPendencyButton } from "@/components/dismiss-pendency-button";
 import { getCertificateOperationalState, getOperationalPriority, operationalAgeHours, type OperationalItem, type OperationalItemType } from "@/lib/operations/queue";
 import { requireOfficeDataClient } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 function priorityTone(priority: string): "danger" | "warning" | "info" { return priority === "CRITICAL" ? "danger" : priority === "HIGH" ? "warning" : "info"; }
 
 export default async function OperationalQueuePage() {
   const db = await requireOfficeDataClient().catch(() => null);
   if (!db) redirect("/app?notice=office");
+  const { data: dismissedRows } = await createAdminClient().from("pendency_dismissals").select("item_id");
+  const dismissed = new Set((dismissedRows ?? []).map((row) => row.item_id));
   const [invoicesResult, certificatesResult, servicesResult, organizationsResult, accessesResult, cancellationsResult] = await Promise.all([
     db.from("invoices").select("id,organization_id,status,created_at,updated_at,amount_cents,customers(legal_name),organizations(legal_name)").in("status", ["UNKNOWN", "REJECTED"]).order("updated_at", { ascending: false }).limit(250),
     db.from("digital_certificates").select("id,organization_id,status,valid_until,created_at,organizations(legal_name)").is("replaced_at", null).order("valid_until").limit(250),
@@ -25,9 +29,10 @@ export default async function OperationalQueuePage() {
   for (const organization of organizationsResult.data ?? []) items.push({ id: `organization-${organization.id}`, organizationId: organization.id, organizationName: organization.legal_name, type: "ORGANIZATION_NOT_READY", title: "Onboarding ou prontidão pendente", description: organization.emission_blocked ? "A emissão permanece bloqueada." : `Status atual: ${organization.status}.`, priority: getOperationalPriority("ORGANIZATION_NOT_READY"), createdAt: organization.created_at, updatedAt: organization.updated_at, href: `/admin/empresas/${organization.id}` });
   for (const access of accessesResult.data ?? []) items.push({ id: `access-${access.id}`, organizationId: access.organization_id, organizationName: access.organizations?.[0]?.legal_name ?? "Empresa", type: "CLIENT_ACCESS_INVALID", title: "Acesso do cliente pendente", description: "O acesso principal do cliente está bloqueado ou pendente.", priority: getOperationalPriority("CLIENT_ACCESS_INVALID"), createdAt: access.created_at, updatedAt: access.created_at, href: `/admin/empresas/${access.organization_id}?tab=users` });
   for (const cancellation of cancellationsResult.data ?? []) items.push({ id: `cancellation-${cancellation.id}`, organizationId: cancellation.organization_id, organizationName: cancellation.organizations?.[0]?.legal_name ?? "Empresa", type: "CANCELLATION_PENDING", title: "Cancelamento aguardando análise", description: cancellation.status === "UNKNOWN" ? "A situação do cancelamento precisa ser confirmada." : "A solicitação ainda não foi concluída.", priority: getOperationalPriority("CANCELLATION_PENDING"), createdAt: cancellation.created_at, updatedAt: cancellation.updated_at, href: "/admin/cancelamentos" });
+  const visibleItems = items.filter((item) => !dismissed.has(item.id));
   const order = { CRITICAL: 0, HIGH: 1, NORMAL: 2 } as const;
-  items.sort((a, b) => order[a.priority] - order[b.priority] || new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
+  visibleItems.sort((a, b) => order[a.priority] - order[b.priority] || new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
   return <div className="page v2-page"><PageHeader title="Pendências" description="Fila operacional consolidada a partir dos dados reais do sistema." />
-    <section className="v2-panel v2-table-panel"><div className="v2-panel-heading"><div><h2>Requer atenção</h2><p>{items.length} item(ns) operacional(is)</p></div></div>{items.length ? <div className="v2-table-scroll"><table className="v2-table"><thead><tr><th>Prioridade</th><th>Empresa</th><th>Tipo</th><th>Descrição</th><th>Atualização</th><th>Ação</th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><td><StatusBadge tone={priorityTone(item.priority)}>{item.priority === "CRITICAL" ? "Crítica" : item.priority === "HIGH" ? "Alta" : "Normal"}</StatusBadge></td><td>{item.organizationName}</td><td className="v2-table-primary">{item.title}</td><td>{item.description}</td><td>{formatDateTime(item.updatedAt)}</td><td><Link className="button ghost compact" href={item.href}>Abrir<ArrowRight size={15} /></Link></td></tr>)}</tbody></table></div> : <EmptyState title="Nenhuma pendência operacional" description="Não há itens que exijam ação agora." action={<Link className="button secondary" href="/admin"><CircleAlert size={17} />Voltar à visão geral</Link>} />}</section>
+    <section className="v2-panel v2-table-panel"><div className="v2-panel-heading"><div><h2>Requer atenção</h2><p>{visibleItems.length} item(ns) operacional(is)</p></div></div>{visibleItems.length ? <div className="v2-table-scroll"><table className="v2-table"><thead><tr><th>Prioridade</th><th>Empresa</th><th>Tipo</th><th>Descrição</th><th>Atualização</th><th>Ação</th></tr></thead><tbody>{visibleItems.map((item) => <tr key={item.id}><td><StatusBadge tone={priorityTone(item.priority)}>{item.priority === "CRITICAL" ? "Crítica" : item.priority === "HIGH" ? "Alta" : "Normal"}</StatusBadge></td><td>{item.organizationName}</td><td className="v2-table-primary">{item.title}</td><td>{item.description}</td><td>{formatDateTime(item.updatedAt)}</td><td><div className="v2-table-actions"><Link className="button ghost compact" href={item.href}>Abrir<ArrowRight size={15} /></Link><DismissPendencyButton itemId={item.id} itemType={item.type} organizationId={item.organizationId} /></div></td></tr>)}</tbody></table></div> : <EmptyState title="Nenhuma pendência operacional" description="Não há itens que exijam ação agora." action={<Link className="button secondary" href="/admin"><CircleAlert size={17} />Voltar à visão geral</Link>} />}</section>
   </div>;
 }
