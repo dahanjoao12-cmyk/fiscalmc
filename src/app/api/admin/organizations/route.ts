@@ -50,7 +50,7 @@ export async function POST(request:Request){
     return NextResponse.json({organization},{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Revise os campos obrigatórios e os formatos informados."},{status:400});
-    return NextResponse.json({error:"Não foi possível criar a empresa. O CNPJ já pode estar cadastrado."},{status:422});
+    return NextResponse.json({error:"Não foi possível criar a empresa. O CNPJ já pode estar cadastrado.",debug:error instanceof Error?`${error.name}: ${error.message}`:JSON.stringify(error)},{status:422});
   }
 }
 
