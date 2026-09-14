@@ -5,6 +5,7 @@ import { requireOfficeSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveCnaeActivity } from "@/lib/organizations/cnae-activity-resolver";
 import { createServiceFromNationalCode } from "@/lib/services/catalog-linking";
+import { logEvent } from "@/lib/observability/logger";
 
 const optionalText=(maximum:number)=>z.string().trim().max(maximum).optional().transform(value=>value||null);
 const cnaeSecundarioInput=z.object({code:z.string().regex(/^\d{7}$/),description:z.string().trim().min(1).max(250)});
@@ -50,7 +51,8 @@ export async function POST(request:Request){
     return NextResponse.json({organization},{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Revise os campos obrigatórios e os formatos informados."},{status:400});
-    return NextResponse.json({error:"Não foi possível criar a empresa. O CNPJ já pode estar cadastrado.",debug:error instanceof Error?`${error.name}: ${error.message}`:JSON.stringify(error)},{status:422});
+    logEvent("error","ORGANIZATION_CREATE_FAILED",{error:error instanceof Error?`${error.name}: ${error.message}`:String(error)});
+    return NextResponse.json({error:"Não foi possível criar a empresa. O CNPJ já pode estar cadastrado."},{status:422});
   }
 }
 
@@ -67,6 +69,7 @@ export async function PATCH(request:Request){
     return NextResponse.json({organization});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Revise os campos obrigatórios e os formatos informados."},{status:400});
+    logEvent("error","ORGANIZATION_UPDATE_FAILED",{error:error instanceof Error?`${error.name}: ${error.message}`:String(error)});
     return NextResponse.json({error:"Não foi possível atualizar o cadastro da empresa."},{status:422});
   }
 }
