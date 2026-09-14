@@ -6,6 +6,7 @@ import { FiscalConfigurationForm } from "@/components/fiscal-configuration-form"
 import { CertificateManager } from "@/components/certificate-manager";
 import { ClientAccessManager } from "@/components/client-access-manager";
 import { MunicipalRegistrationForm } from "@/components/municipal-registration-form";
+import { DeleteOrganizationButton } from "@/components/delete-organization-button";
 import { EmissionPreflight } from "@/components/emission-preflight";
 import { IssueForm, type IssueCustomer, type IssueService } from "@/components/issue-form";
 import { StatusBadge, formatDate, formatTaxId } from "@/components/ui-kit";
@@ -40,6 +41,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   const canReadClientAccess = can(officeSession.role, "client-access:read");
   const canManageClientAccess = can(officeSession.role, "client-access:write");
   const canRunEmissionPreflight = can(officeSession.role, "invoice:issue");
+  const canDeleteCompany = can(officeSession.role, "company:write");
   const [companyResult, servicesResult, taxProfileResult, catalogResult, customersResult, certificateResult, clientAccessResult, lastInvoiceResult] = await Promise.all([
     db.from("organizations").select("id,legal_name,trade_name,tax_id,municipality_code,status,emission_blocked,municipal_registration,street,address_number,address_complement,neighborhood,state,postal_code,email,phone").eq("id", id).maybeSingle(),
     needsServices ? createAdminClient().from("service_templates").select("id,name,default_description,active,workflow_status,created_via,client_service_location,client_note,needs_info_message,submitted_at,review_note,updated_at,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by,national_service_codes(display_code,description)").eq("organization_id", id).order("updated_at", { ascending: false }) : Promise.resolve({ data: [] }),
@@ -71,7 +73,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   return <div className="page v2-page company-detail-page">
     <header className="v2-company-header">
       <div><Link className="v2-back-link" href="/admin/empresas">← Empresas</Link><h1>{company.legal_name}</h1><p>{formatTaxId(company.tax_id)}<span>•</span>{company.municipality_code}{company.state ? ` / ${company.state}` : ""}<span>•</span><StatusBadge tone={company.emission_blocked ? "warning" : "success"}>{company.emission_blocked ? "Emissão bloqueada" : company.status}</StatusBadge></p></div>
-      <div className="v2-page-actions"><Link className="button primary" href={`/admin/empresas/${id}?tab=issue`}><FilePlus2 size={18} />Emitir NFS-e</Link><Link className="button secondary" href={`/admin/empresas/${id}?tab=overview`}><Pencil size={17} />Ver cadastro</Link></div>
+      <div className="v2-page-actions"><Link className="button primary" href={`/admin/empresas/${id}?tab=issue`}><FilePlus2 size={18} />Emitir NFS-e</Link><Link className="button secondary" href={`/admin/empresas/${id}?tab=overview`}><Pencil size={17} />Ver cadastro</Link>{canDeleteCompany ? <DeleteOrganizationButton organizationId={id} organizationName={company.legal_name} /> : null}</div>
     </header>
     <nav className="tabs v2-tabs" aria-label="Seções da empresa">{tabs.map(([key, label]) => <Link className={tab === key ? "active" : ""} href={`/admin/empresas/${id}?tab=${key}`} key={key}>{label}</Link>)}</nav>
 

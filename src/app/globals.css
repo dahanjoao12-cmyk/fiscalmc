@@ -454,6 +454,12 @@ textarea.input { min-height:92px; }
 .v2-inline-dialog p { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
 .v2-inline-dialog > div { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
 .cancellation-office-actions { justify-content:flex-start; flex-wrap:wrap; }
+.button.danger { color:#fff; background:#b3261e; border-color:#b3261e; }
+.button.danger:hover { background:#8f1e18; }
+.v2-inline-dialog-danger { border-color:#e3a39c; background:#fff5f4; }
+.v2-dialog-warning { display:flex; align-items:center; gap:9px; color:#8c1d13; }
+.v2-dialog-warning strong { font-size:13px; letter-spacing:.01em; }
+.v2-dialog-error { color:#b3261e !important; font-weight:650; }
 .cancellation-office-actions small { flex-basis:100%; color:var(--muted); font-size:11px; }
 .v2-cell-description { max-width:300px; white-space:normal; line-height:1.45; }
 .v2-log-details summary { cursor:pointer; color:var(--orange-dark); font-size:12px; font-weight:700; }
