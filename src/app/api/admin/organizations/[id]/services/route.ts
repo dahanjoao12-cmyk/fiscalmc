@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireOfficeSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getServiceTechnicalReadiness } from "@/lib/nfse/service-readiness";
+import { findReusableFiscalConfiguration } from "@/lib/services/catalog-linking";
 
 export const runtime = "nodejs";
 
@@ -71,6 +72,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const input = createSchema.parse(await request.json());
     const { db, organization, code } = await getOrganizationAndCode(organizationId, input.nationalServiceCodeId);
     if (!organization || !code) return NextResponse.json({ error: "Empresa ou código nacional indisponível." }, { status: 422 });
+
+    // Another company already reviewed by the office (this organization, or one
+    // in the same municipality) may already have a proven configuration for this
+    // exact national tax code. Reuse it instead of asking the office to retype
+    // municipal mapping / NBS / ISS parameters that are properties of the
+    // service item and municipality, not of this specific taxpayer.
+    const reused = await findReusableFiscalConfiguration({ db, organizationId, nationalTaxCode: code.code });
+    if (reused) {
+      const now = new Date().toISOString();
+      const { data, error } = await db.from("service_templates").insert({
+        organization_id: organizationId,
+        name: input.name,
+        default_description: input.defaultDescription || null,
+        review_note: input.reviewNote || null,
+        created_by: session.userId,
+        created_via: "OFFICE",
+        ...reused.fields,
+        workflow_status: "AUTO_READY",
+        active: true,
+        reviewed_at: null,
+        reviewed_by: null,
+        auto_ready_at: now,
+        auto_ready_source: reused.source,
+      }).select("id").single();
+      if (error || !data) throw error ?? new Error("SERVICE_CREATE_FAILED");
+      await db.from("audit_logs").insert({ organization_id: organizationId, actor_user_id: session.userId, actor_type: "OFFICE", action: "service_template_auto_ready", entity: "service_template", entity_id: data.id, safe_metadata: { source: reused.source } });
+      return NextResponse.json({ service: data, autoReady: true }, { status: 201 });
+    }
+
     const mapping = await resolveMapping({ db, organizationId, nationalServiceCodeId: code.id, mappingInput: input });
     if (!mapping) return NextResponse.json({ error: "O mapeamento municipal selecionado não é válido para esta empresa." }, { status: 422 });
     const { data, error } = await db.from("service_templates").insert({
