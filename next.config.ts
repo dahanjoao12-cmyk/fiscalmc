@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  basePath: "/emissor",
   poweredByHeader: false,
   reactStrictMode: true,
   outputFileTracingIncludes: {
