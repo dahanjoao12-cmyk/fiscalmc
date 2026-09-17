@@ -13,20 +13,28 @@ function optionalClaimString(value:unknown){
 
 const getAuthenticatedClient=cache(async()=>{
   const client=await createClient();
-  if(!client)return{client:null,user:null};
+  if(!client)return{client:null,user:null,clientOrganizationId:null};
   // getClaims verifies the signed JWT locally when Supabase uses asymmetric
   // signing keys. This avoids an Auth server round-trip on every navigation.
   const {data,error}=await client.auth.getClaims();
   const claims=data?.claims;
   const id=optionalClaimString(claims?.sub);
-  if(error||!id)return{client,user:null};
+  if(error||!id)return{client,user:null,clientOrganizationId:null};
   const email=optionalClaimString(claims?.email);
   const metadata=claims?.user_metadata;
   const fullName=metadata&&typeof metadata==="object"&&!Array.isArray(metadata)
     ?optionalClaimString((metadata as Record<string,unknown>).full_name)
     :null;
   const user:AuthenticatedUser={id,email,displayName:fullName??email??"Usuário"};
-  return{client,user};
+  // client_accesses issues CLIENT_USER tokens with organization_id baked into
+  // app_metadata (see client-access-service.ts), so the common client page
+  // load can skip the memberships round-trip entirely. Anything else (office
+  // staff, who can hold multiple memberships) still resolves via the DB below.
+  const appMetadata=claims?.app_metadata;
+  const clientOrganizationId=appMetadata&&typeof appMetadata==="object"&&!Array.isArray(appMetadata)&&(appMetadata as Record<string,unknown>).account_type==="CLIENT_USER"
+    ?optionalClaimString((appMetadata as Record<string,unknown>).organization_id)
+    :null;
+  return{client,user,clientOrganizationId};
 });
 const getActiveMemberships=cache(async(userId:string)=>{
   const {client}=await getAuthenticatedClient();
@@ -34,9 +42,10 @@ const getActiveMemberships=cache(async(userId:string)=>{
   return client.from("memberships").select("organization_id,role").eq("user_id",userId).eq("active",true);
 });
 export async function requireSessionOrganization():Promise<SessionOrganization>{
-  const {client,user}=await getAuthenticatedClient();
+  const {client,user,clientOrganizationId}=await getAuthenticatedClient();
   if(!client) throw new Error("AUTH_CONFIGURATION_REQUIRED");
   if(!user) throw new Error("UNAUTHENTICATED");
+  if(clientOrganizationId)return{organizationId:clientOrganizationId,role:"CLIENT_USER",userId:user.id};
   const {data,error}=await getActiveMemberships(user.id);
   if(error||!data?.length) throw new Error("FORBIDDEN_ORGANIZATION");
   if(data.length>1) throw new Error("ORGANIZATION_CONTEXT_REQUIRED");
