@@ -1,15 +1,16 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
+import { BASE_PATH } from "@/lib/base-path";
 
 export const metadata: Metadata = {
   title: { default: "Moreira & Castro", template: "%s | Moreira & Castro" },
   description: "Emissão simples e segura de NFS-e.",
   applicationName: "Moreira & Castro",
-  manifest: "/manifest.webmanifest",
+  manifest: `${BASE_PATH}/manifest.webmanifest`,
   icons: {
-    icon: [{ url: "/favicon-64.png", sizes: "64x64", type: "image/png" }],
-    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }]
+    icon: [{ url: `${BASE_PATH}/favicon-64.png`, sizes: "64x64", type: "image/png" }],
+    apple: [{ url: `${BASE_PATH}/icon-192.png`, sizes: "192x192", type: "image/png" }]
   },
   appleWebApp: { capable: true, title: "Moreira & Castro", statusBarStyle: "default" }
 };
