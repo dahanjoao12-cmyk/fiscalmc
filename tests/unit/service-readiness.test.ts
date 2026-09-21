@@ -19,10 +19,18 @@ const complete = {
 };
 
 describe("service template readiness", () => {
-  it("mantém código DPS desconhecido como pendência", () => {
-    const readiness = getServiceReadiness({ ...complete, dps_municipal_tax_code: null });
-    expect(readiness.ready).toBe(false);
-    expect(readiness.missing).toContain("Código DPS municipal");
+  it("não exige o código DPS municipal — opcional na DPS nacional", () => {
+    const readiness = getServiceReadiness({ ...complete, dps_municipal_tax_code: null, dps_municipal_tax_code_source: null });
+    expect(readiness.ready).toBe(true);
+    expect(readiness.missing).not.toContain("Código DPS municipal");
+  });
+  it("dispensa o de/para municipal quando o serviço é isento ou imune", () => {
+    const isento = getServiceReadiness({ ...complete, iss_taxation: "3", municipal_service_mapping_id: null, municipal_service_code: null });
+    expect(isento.ready).toBe(true);
+    expect(isento.missing).not.toContain("De/para municipal");
+    const imune = getServiceReadiness({ ...complete, iss_taxation: "4", municipal_service_mapping_id: null, municipal_service_code: null });
+    expect(imune.ready).toBe(true);
+    expect(imune.missing).not.toContain("De/para municipal");
   });
   it("não aceita código municipal sem de/para selecionado", () => {
     const readiness = getServiceReadiness({ ...complete, municipal_service_mapping_id: null });
@@ -66,7 +74,7 @@ describe("service template readiness", () => {
   });
   it("permite AUTO_READY somente com a mesma configuração técnica completa", () => {
     expect(getServiceReadiness({ ...complete, workflow_status: "AUTO_READY", reviewed_at: null, reviewed_by: null }).ready).toBe(true);
-    expect(getServiceReadiness({ ...complete, workflow_status: "AUTO_READY", reviewed_at: null, reviewed_by: null, dps_municipal_tax_code: null }).ready).toBe(false);
+    expect(getServiceReadiness({ ...complete, workflow_status: "AUTO_READY", reviewed_at: null, reviewed_by: null, municipal_service_mapping_id: null }).ready).toBe(false);
   });
   it("só torna um serviço pronto quando ativo, revisado e auditável", () => {
     expect(getServiceReadiness(complete).ready).toBe(true);

@@ -47,7 +47,7 @@ export async function assertDpsReadiness(input: {
   const issuerAddress = assertDomesticAddress(organization.address, "organização");
   if (!organization.address.stateOrProvince) incomplete("organização");
 
-  if (!/^\d{6}$/.test(service.nationalTaxCode) || !/^\d{3}$/.test(service.municipalTaxCode) || !/^\d{7}$/.test(service.locationMunicipalityCode)) incomplete("serviço");
+  if (!/^\d{6}$/.test(service.nationalTaxCode) || (service.municipalTaxCode && !/^\d{3}$/.test(service.municipalTaxCode)) || !/^\d{7}$/.test(service.locationMunicipalityCode)) incomplete("serviço");
 
   const domesticId = customer.taxId?.replace(/\D/g, "");
   if (!customer.name || !((domesticId?.length === 11 || domesticId?.length === 14) || customer.foreignTaxId || customer.noForeignTaxIdReason)) incomplete("tomador");

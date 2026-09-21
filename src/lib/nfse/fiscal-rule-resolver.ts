@@ -22,6 +22,12 @@ export async function resolveFiscalConfiguration(input:FiscalResolutionInput):Pr
   const parsedRateSource=issRateSourceSchema.safeParse(input.issRateSource);
   if(!input.issTaxation||!parsedRateSource.success)throw incomplete();
   const issRateSource=parsedRateSource.data;
+  // Isento/imune has no municipal rate to look up — 0% is the definitionally
+  // correct answer, not a guess, so the municipal service code (the rate
+  // lookup key for taxable operations) is not required in this case.
+  if(input.issTaxation==="3"||input.issTaxation==="4"){
+    return{municipalityCode:input.municipalityCode,nationalTaxCode:input.nationalTaxCode,iss:{taxation:input.issTaxation,rateSource:issRateSource,withholdingType:dpsConfiguration.iss.withholdingType,source:"MUNICIPAL_INTEGRATION",...(issRateSource==="EMITTER_PROVIDED"?{rateBasisPoints:0}:{})},retention:{officialRulesChecked:false},dpsConfiguration,issuerMunicipalRegistrationEmission,source:"MUNICIPAL_PARAMETERS",validity:{validFrom:input.serviceDate}};
+  }
   if(issRateSource==="PARAMETRIZED_BY_NATIONAL"){
     if(!input.dpsMunicipalTaxCode||!matchesAcceptedProductionDpsReference(input.fiscalReference,{nationalTaxCode:input.nationalTaxCode,municipalTaxCode:input.dpsMunicipalTaxCode,nbsCode:input.nbsCode}))throw incomplete();
     const reference=input.fiscalReference as {referenceCompetence:string;issTaxation:string;issWithholding:string};

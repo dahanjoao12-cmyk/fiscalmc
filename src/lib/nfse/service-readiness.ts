@@ -27,13 +27,14 @@ export function getServiceTechnicalReadiness(service: ServiceReadinessInput) {
     municipalTaxCode: service.dps_municipal_tax_code ?? "",
     nbsCode: service.nbs_code,
   });
+  const issExempt = service.iss_taxation === "3" || service.iss_taxation === "4";
   if (
-    (!service.municipal_service_mapping_id || !service.municipal_service_code)
+    !issExempt
+    && (!service.municipal_service_mapping_id || !service.municipal_service_code)
     && !(acceptedReference && service.iss_rate_source === "PARAMETRIZED_BY_NATIONAL")
   ) {
     missing.push("De/para municipal");
   }
-  if (!service.dps_municipal_tax_code) missing.push("Código DPS municipal");
   if (service.dps_municipal_tax_code && !service.dps_municipal_tax_code_source) missing.push("Fonte do código DPS municipal");
   if (!service.service_location_municipality_code) missing.push("Município de prestação");
   if (!service.nbs_code) missing.push("Código NBS");
