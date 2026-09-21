@@ -8,7 +8,7 @@ export function getOrganizationReadiness(input: {
   certificate: { ready: boolean; message: string; warning?: string };
   clientAccess: { ready: boolean; message: string };
 }) {
-  const registrationReady = Boolean(input.registration.municipalRegistration?.trim() && input.registration.street?.trim() && input.registration.addressNumber?.trim() && input.registration.neighborhood?.trim() && input.registration.state?.trim());
+  const registrationReady = Boolean(input.registration.street?.trim() && input.registration.addressNumber?.trim() && input.registration.neighborhood?.trim() && input.registration.state?.trim());
   const items: ReadinessItem[] = [
     { key: "registration", ready: registrationReady, message: registrationReady ? "Dados cadastrais completos." : "Dados cadastrais requerem atenção." },
     { key: "fiscal", ...input.fiscal },

@@ -43,7 +43,7 @@ export async function assertDpsReadiness(input: {
   organizationId?:string;
 }) {
   const { organization, service, customer, fiscal } = input;
-  if (!organization.legalName || !/^\d{14}$/.test(organization.taxId.replace(/\D/g, "")) || !organization.municipalRegistration || !/^\d{7}$/.test(organization.municipalityCode)) incomplete("organização");
+  if (!organization.legalName || !/^\d{14}$/.test(organization.taxId.replace(/\D/g, "")) || !/^\d{7}$/.test(organization.municipalityCode)) incomplete("organização");
   const issuerAddress = assertDomesticAddress(organization.address, "organização");
   if (!organization.address.stateOrProvince) incomplete("organização");
 
