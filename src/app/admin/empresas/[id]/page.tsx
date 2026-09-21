@@ -7,6 +7,7 @@ import { CertificateManager } from "@/components/certificate-manager";
 import { ClientAccessManager } from "@/components/client-access-manager";
 import { MunicipalRegistrationForm } from "@/components/municipal-registration-form";
 import { DeleteOrganizationButton } from "@/components/delete-organization-button";
+import { EmissionBlockToggle } from "@/components/emission-block-toggle";
 import { EmissionPreflight } from "@/components/emission-preflight";
 import { IssueForm, type IssueCustomer, type IssueService } from "@/components/issue-form";
 import { StatusBadge, formatDate, formatTaxId } from "@/components/ui-kit";
@@ -73,7 +74,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   return <div className="page v2-page company-detail-page">
     <header className="v2-company-header">
       <div><Link className="v2-back-link" href="/admin/empresas">← Empresas</Link><h1>{company.legal_name}</h1><p>{formatTaxId(company.tax_id)}<span>•</span>{company.municipality_code}{company.state ? ` / ${company.state}` : ""}<span>•</span><StatusBadge tone={company.emission_blocked ? "warning" : "success"}>{company.emission_blocked ? "Emissão bloqueada" : company.status}</StatusBadge></p></div>
-      <div className="v2-page-actions"><Link className="button primary" href={`/admin/empresas/${id}?tab=issue`}><FilePlus2 size={18} />Emitir NFS-e</Link><Link className="button secondary" href={`/admin/empresas/${id}?tab=overview`}><Pencil size={17} />Ver cadastro</Link>{canDeleteCompany ? <DeleteOrganizationButton organizationId={id} organizationName={company.legal_name} /> : null}</div>
+      <div className="v2-page-actions">{canDeleteCompany && company.emission_blocked ? <EmissionBlockToggle organizationId={id} blocked={company.emission_blocked} readinessComplete={organizationReadiness.overallReady} /> : null}<Link className="button primary" href={`/admin/empresas/${id}?tab=issue`}><FilePlus2 size={18} />Emitir NFS-e</Link><Link className="button secondary" href={`/admin/empresas/${id}?tab=overview`}><Pencil size={17} />Ver cadastro</Link>{canDeleteCompany ? <DeleteOrganizationButton organizationId={id} organizationName={company.legal_name} /> : null}</div>
     </header>
     <nav className="tabs v2-tabs" aria-label="Seções da empresa">{tabs.map(([key, label]) => <Link className={tab === key ? "active" : ""} href={`/admin/empresas/${id}?tab=${key}`} key={key}>{label}</Link>)}</nav>
 

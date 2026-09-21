@@ -3,6 +3,59 @@ import { z } from "zod";
 import { requireOfficeSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { can } from "@/lib/security/authorization";
+import { createClientAccessService } from "@/lib/auth/client-access-service";
+import { getOrganizationReadiness } from "@/lib/organizations/readiness";
+import { getFiscalConfigurationReadiness } from "@/lib/nfse/fiscal-configuration";
+import { getServiceReadiness } from "@/lib/nfse/service-readiness";
+import { getCertificateReadiness } from "@/lib/nfse/certificate/status";
+
+const patchSchema = z.object({ action: z.enum(["release", "block"]) }).strict();
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await requireOfficeSession();
+    if (!can(session.role, "company:write")) return NextResponse.json({ error: "Apenas um administrador pode alterar o bloqueio de emissão." }, { status: 403 });
+    const { id } = await params;
+    if (!z.string().uuid().safeParse(id).success) return NextResponse.json({ error: "Empresa não encontrada." }, { status: 404 });
+    const db = createAdminClient();
+    const input = patchSchema.parse(await request.json());
+
+    if (input.action === "block") {
+      const { error } = await db.from("organizations").update({ emission_blocked: true }).eq("id", id);
+      if (error) throw error;
+      await db.from("audit_logs").insert({ organization_id: id, actor_user_id: session.userId, actor_type: "OFFICE", action: "emission_blocked", entity: "organization", entity_id: id, safe_metadata: {} });
+      return NextResponse.json({ ok: true, emissionBlocked: true });
+    }
+
+    const [{ data: organization }, { data: services }, { data: profile }, { data: certificate }, clientAccess] = await Promise.all([
+      db.from("organizations").select("id,status,municipal_registration,street,address_number,neighborhood,state,tax_id").eq("id", id).maybeSingle(),
+      db.from("service_templates").select("id,active,workflow_status,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by").eq("organization_id", id),
+      db.from("tax_profiles").select("tax_regime,reviewed_at,reviewed_by,iss_configuration,dps_configuration").eq("organization_id", id).maybeSingle(),
+      db.from("digital_certificates").select("status,owner_tax_id,valid_until").eq("organization_id", id).is("replaced_at", null).maybeSingle(),
+      createClientAccessService(db).getSummary(id),
+    ]);
+    if (!organization) return NextResponse.json({ error: "Empresa não encontrada." }, { status: 404 });
+    const fiscalReadiness = getFiscalConfigurationReadiness(profile);
+    const certificateReadiness = getCertificateReadiness({ certificate, organizationTaxId: organization.tax_id });
+    const readyServices = (services ?? []).filter((service) => getServiceReadiness(service).ready);
+    const organizationReadiness = getOrganizationReadiness({
+      registration: { municipalRegistration: organization.municipal_registration, street: organization.street, addressNumber: organization.address_number, neighborhood: organization.neighborhood, state: organization.state },
+      fiscal: { ready: fiscalReadiness.status === "REVIEWED", message: "" },
+      services: { ready: readyServices.length > 0, message: "" },
+      certificate: { ready: certificateReadiness.ready, message: certificateReadiness.message },
+      clientAccess: clientAccess?.readiness ?? { ready: false, message: "Acesso do cliente não cadastrado." },
+    });
+    if (!organizationReadiness.overallReady) return NextResponse.json({ error: "A empresa ainda tem pendências de prontidão. Resolva-as antes de liberar a emissão.", items: organizationReadiness.items.filter((item) => !item.ready).map((item) => item.key) }, { status: 422 });
+
+    const { error } = await db.from("organizations").update({ emission_blocked: false, ...(organization.status === "ONBOARDING" ? { status: "ACTIVE" } : {}) }).eq("id", id);
+    if (error) throw error;
+    await db.from("audit_logs").insert({ organization_id: id, actor_user_id: session.userId, actor_type: "OFFICE", action: "emission_unblocked", entity: "organization", entity_id: id, safe_metadata: {} });
+    return NextResponse.json({ ok: true, emissionBlocked: false });
+  } catch (error) {
+    if (error instanceof z.ZodError) return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
+    return NextResponse.json({ error: "Não foi possível alterar o bloqueio de emissão." }, { status: 422 });
+  }
+}
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
