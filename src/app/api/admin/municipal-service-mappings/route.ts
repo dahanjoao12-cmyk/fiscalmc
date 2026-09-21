@@ -22,7 +22,7 @@ export async function GET(request:Request){
 const createSchema=z.object({
   municipalityCode:z.string().regex(/^\d{7}$/),
   nationalServiceCodeId:z.uuid(),
-  municipalServiceCode:z.string().trim().min(1).max(60),
+  municipalServiceCode:z.string().trim().regex(/^\d{2}\.\d{2}\.\d{2}\.\d{3}$/,"O código municipal deve seguir o formato 00.00.00.000, do ambiente de convênio do Sistema Nacional — não é o código nacional reformatado."),
   source:z.string().trim().min(3).max(320),
   sourceVersion:z.string().trim().max(160).optional(),
   validFrom:z.iso.date().optional(),
@@ -48,7 +48,21 @@ export async function POST(request:Request){
     await db.from("audit_logs").insert({actor_user_id:session.userId,actor_type:"OFFICE",action:"municipal_service_mapping_created",entity:"municipal_service_mapping",entity_id:data.id,safe_metadata:{municipalityCode:input.municipalityCode,nationalServiceCodeId:input.nationalServiceCodeId}});
     return NextResponse.json({mapping:data},{status:201});
   }catch(error){
-    if(error instanceof z.ZodError)return NextResponse.json({error:"Revise os campos do de/para municipal."},{status:400});
+    if(error instanceof z.ZodError)return NextResponse.json({error:error.issues[0]?.message??"Revise os campos do de/para municipal."},{status:400});
     return NextResponse.json({error:"Não foi possível cadastrar o de/para municipal."},{status:403});
+  }
+}
+
+export async function DELETE(request:Request){
+  try{
+    const session=await requireOfficeSession();
+    const id=z.uuid().parse(new URL(request.url).searchParams.get("id"));
+    const db=createAdminClient();
+    const {error}=await db.from("municipal_service_mappings").delete().eq("id",id);
+    if(error)throw error;
+    await db.from("audit_logs").insert({actor_user_id:session.userId,actor_type:"OFFICE",action:"municipal_service_mapping_deleted",entity:"municipal_service_mapping",entity_id:id,safe_metadata:{}});
+    return NextResponse.json({ok:true});
+  }catch{
+    return NextResponse.json({error:"Não foi possível remover o de/para municipal."},{status:403});
   }
 }
