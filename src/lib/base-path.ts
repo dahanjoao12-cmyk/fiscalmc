@@ -6,3 +6,13 @@
  * applies basePath automatically to next/link and next/navigation routing.
  */
 export const BASE_PATH = "/emissor";
+
+/**
+ * Client components call our own route handlers with a root-relative
+ * fetch("/api/...") — Next.js does not rewrite those to the basePath the
+ * way it does next/link and next/navigation. Wrap every such path in this
+ * before passing it to fetch().
+ */
+export function apiUrl(path: string): string {
+  return `${BASE_PATH}${path}`;
+}

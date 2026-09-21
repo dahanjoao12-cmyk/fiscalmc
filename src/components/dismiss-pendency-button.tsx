@@ -3,6 +3,7 @@
 import { Check, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/base-path";
 
 export function DismissPendencyButton({ itemId, itemType, organizationId }: { itemId: string; itemType: string; organizationId: string }) {
   const router = useRouter();
@@ -13,7 +14,7 @@ export function DismissPendencyButton({ itemId, itemType, organizationId }: { it
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/admin/pendencias", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId, itemType, organizationId }) });
+      const response = await fetch(apiUrl("/api/admin/pendencias"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId, itemType, organizationId }) });
       if (!response.ok) { const body = await response.json() as { error?: string }; throw new Error(body.error ?? "Não foi possível marcar como resolvido."); }
       router.refresh();
     } catch (cause) {

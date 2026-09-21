@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { CheckCircle2, LoaderCircle, ShieldCheck, XCircle } from "lucide-react";
+import { apiUrl } from "@/lib/base-path";
 
 type PreflightResult = {
   readiness: { registration: boolean; fiscal: boolean; service: boolean; certificate: boolean; clientAccess: boolean; organization: boolean };
@@ -70,7 +71,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
     setXsdDiagnostic(null);
     setResult(null);
     try {
-      const response = await fetch(`/api/admin/organizations/${organizationId}/emission-preflight`, {
+      const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}/emission-preflight`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

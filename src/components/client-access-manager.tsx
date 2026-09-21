@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { KeyRound, LockKeyhole, RotateCcw, ShieldCheck, UserRoundPlus } from "lucide-react";
+import { apiUrl } from "@/lib/base-path";
 
 type Access = { cnpj: string; status: "ACTIVE" | "BLOCKED" | "INVALID"; createdAt: string; blockedAt: string | null };
 type AccessResult = { access: Access | null; readiness: { ready: boolean; status: string; message: string } };
@@ -17,7 +18,7 @@ export function ClientAccessManager({ organizationId, organizationTaxId, initial
   async function request(method: "POST" | "PATCH", body: Record<string, string>) {
     setSaving(true); setError(null); setNotice(null);
     try {
-      const response = await fetch(`/api/admin/organizations/${organizationId}/client-access`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}/client-access`), { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const payload = await response.json() as AccessResult & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Não foi possível atualizar o acesso.");
       setResult(payload); setPassword(""); setConfirmPassword(""); setMode(null);

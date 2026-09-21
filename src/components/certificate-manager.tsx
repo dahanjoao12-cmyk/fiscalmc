@@ -4,6 +4,7 @@ import { useRef,useState } from "react";
 import { CheckCircle2,ShieldAlert,Upload,XCircle } from "lucide-react";
 import { getCertificateReadiness,type StoredCertificateStatus } from "@/lib/nfse/certificate/status";
 import { certificateHolderName } from "@/lib/nfse/certificate/presentation";
+import { apiUrl } from "@/lib/base-path";
 
 type Certificate={id:string;subject:string;issuer:string;serial:string;owner_tax_id:string|null;valid_from:string;valid_until:string;status:StoredCertificateStatus;created_at?:string};
 function formatTaxId(value:string){return value.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,"$1.$2.$3/$4-$5");}
@@ -18,14 +19,14 @@ export function CertificateManager({organizationId,organizationTaxId,initialCert
     setSaving(true);setError("");
     const form=new FormData();form.set("file",file);form.set("password",password);
     try{
-      const response=await fetch(`/api/admin/organizations/${organizationId}/certificate`,{method:"POST",body:form});
+      const response=await fetch(apiUrl(`/api/admin/organizations/${organizationId}/certificate`),{method:"POST",body:form});
       const result=await response.json();
       if(!response.ok){setError(result.error??"Não foi possível cadastrar o certificado.");return;}
       setCertificate(result.certificate);setFile(null);setPassword("");if(fileInput.current)fileInput.current.value="";
     }catch{setError("Não foi possível cadastrar o certificado.");}
     finally{setSaving(false);}
   }
-  async function validateCertificate(){setValidatingCertificate(true);setValidationResult(null);setValidationError("");setValidationHttp("");try{const response=await fetch(`/api/admin/organizations/${organizationId}/certificate/preflight`);const type=response.headers.get("content-type")??"";const raw=await response.text();const diagnostic=`HTTP: ${response.status} ${response.statusText||"—"} · Tipo: ${type.includes("application/json")?"JSON":"NON_JSON"} · Redirect: ${response.redirected?"SIM":"NÃO"}`;setValidationHttp(diagnostic);let result:unknown=null;if(type.includes("application/json")){try{result=JSON.parse(raw);}catch{setValidationResult("FAIL");setValidationError("PREFLIGHT_JSON_ERROR");return;}}else{setValidationResult("FAIL");setValidationError(response.redirected?"PREFLIGHT_REDIRECTED":"PREFLIGHT_NON_JSON_RESPONSE");return;}if(!response.ok){setValidationResult("FAIL");setValidationError(typeof result==="object"&&result&&"code" in result&&typeof result.code==="string"?result.code:"PREFLIGHT_JSON_ERROR");return;}setValidationResult("PASS");}catch{setValidationResult("FAIL");setValidationError("PREFLIGHT_NETWORK_ERROR");}finally{setValidatingCertificate(false);}}
+  async function validateCertificate(){setValidatingCertificate(true);setValidationResult(null);setValidationError("");setValidationHttp("");try{const response=await fetch(apiUrl(`/api/admin/organizations/${organizationId}/certificate/preflight`));const type=response.headers.get("content-type")??"";const raw=await response.text();const diagnostic=`HTTP: ${response.status} ${response.statusText||"—"} · Tipo: ${type.includes("application/json")?"JSON":"NON_JSON"} · Redirect: ${response.redirected?"SIM":"NÃO"}`;setValidationHttp(diagnostic);let result:unknown=null;if(type.includes("application/json")){try{result=JSON.parse(raw);}catch{setValidationResult("FAIL");setValidationError("PREFLIGHT_JSON_ERROR");return;}}else{setValidationResult("FAIL");setValidationError(response.redirected?"PREFLIGHT_REDIRECTED":"PREFLIGHT_NON_JSON_RESPONSE");return;}if(!response.ok){setValidationResult("FAIL");setValidationError(typeof result==="object"&&result&&"code" in result&&typeof result.code==="string"?result.code:"PREFLIGHT_JSON_ERROR");return;}setValidationResult("PASS");}catch{setValidationResult("FAIL");setValidationError("PREFLIGHT_NETWORK_ERROR");}finally{setValidatingCertificate(false);}}
   return <section className="certificate-manager">
     <div className="certificate-header"><div><p className="eyebrow">Certificado digital A1</p><h2>{certificate?readiness.message:"Nenhum certificado cadastrado."}</h2><p>O arquivo e a senha são tratados exclusivamente no servidor.</p></div>{certificate?(readiness.ready?<CheckCircle2 className="certificate-icon valid"/>:<XCircle className="certificate-icon invalid"/>):<ShieldAlert className="certificate-icon"/>}</div>
     {certificate&&<dl className="certificate-details"><div><dt>Titular</dt><dd>{certificateHolderName(certificate.subject)}</dd></div><div><dt>CNPJ</dt><dd>{certificate.owner_tax_id?formatTaxId(certificate.owner_tax_id):"Não identificado"}</dd></div><div><dt>Validade</dt><dd>{formatDate(certificate.valid_until)}</dd></div><div><dt>Status</dt><dd><span className={`status ${readiness.warning||!readiness.ready?"warning":""}`}>{readiness.status==="EXPIRING"?"Vence em breve":readiness.status==="VALID"?"Válido":readiness.status}</span></dd></div></dl>}

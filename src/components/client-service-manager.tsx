@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowRight, CheckCircle2, Clock3, MessageCircleWarning, Pencil, Plus, Send, X } from "lucide-react";
 import { StatusBadge, formatDateTime } from "@/components/ui-kit";
 import { getClientServiceStatusLabel, type ServiceWorkflowStatus } from "@/lib/services/workflow";
+import { apiUrl } from "@/lib/base-path";
 
 export type ClientService = {
   id: string;
@@ -91,7 +92,7 @@ export function ClientServiceManager({ initialServices }: { initialServices: Cli
     setError("");
     try {
       const payload = { ...form, serviceLocation: form.serviceLocationMode === "OTHER" ? form.serviceLocation || null : null };
-      const response = await fetch("/api/services", {
+      const response = await fetch(apiUrl("/api/services"), {
         method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editingId ? { action: "update", id: editingId, ...payload } : payload),
@@ -111,7 +112,7 @@ export function ClientServiceManager({ initialServices }: { initialServices: Cli
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/services", {
+      const response = await fetch(apiUrl("/api/services"), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "submit", id: service.id }),

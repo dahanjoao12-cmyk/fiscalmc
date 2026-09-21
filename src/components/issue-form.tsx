@@ -5,6 +5,7 @@ import { Check, ChevronLeft, ChevronRight, FileCheck2, FileText, LoaderCircle, S
 import { useEffect, useState } from "react";
 import { getInvoicePresentation } from "@/lib/invoices/presentation";
 import { canAdvanceClientIssuance, clientIssuanceSteps, getCatalogSelectionOutcome, mergeCatalogPage, type ClientIssuanceStep } from "@/lib/issuance/client-flow";
+import { apiUrl } from "@/lib/base-path";
 
 export type IssueCustomer = { id: string; legalName: string; taxId?: string | null };
 export type IssueService = { id: string; name: string; defaultDescription?: string | null };
@@ -63,7 +64,7 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
     setSubmitting(true);
     setStep(4);
     try {
-      const response = await fetch("/api/invoices", {
+      const response = await fetch(apiUrl("/api/invoices"), {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({
@@ -139,7 +140,7 @@ function SecondaryActivities() {
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch("/api/services/secondary-activities");
+        const response = await fetch(apiUrl("/api/services/secondary-activities"));
         const result = await response.json() as { activities?: SecondaryActivity[]; error?: string };
         if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar as atividades.");
         if (!cancelled) setItems(result.activities ?? []);
@@ -157,7 +158,7 @@ function SecondaryActivities() {
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-secondary", nationalServiceCodeId: item.nationalServiceCodeId }) });
+      const response = await fetch(apiUrl("/api/services"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-secondary", nationalServiceCodeId: item.nationalServiceCodeId }) });
       const result = await response.json() as CatalogServiceResult;
       if (!response.ok) throw new Error(result.error ?? "Não foi possível selecionar a atividade.");
       setItems((current) => current.map((currentItem) => currentItem.nationalServiceCodeId === item.nationalServiceCodeId ? { ...currentItem, added: true } : currentItem));
@@ -191,7 +192,7 @@ function IssuanceCatalog({ onReady, organizationId }: { onReady: (service: Issue
       setLoading(true);
       setError("");
       try {
-        const response = await fetch(`/api/services/catalog?q=${encodeURIComponent(query)}&page=${page}&organizationId=${organizationId}`, { signal: controller.signal });
+        const response = await fetch(apiUrl(`/api/services/catalog?q=${encodeURIComponent(query)}&page=${page}&organizationId=${organizationId}`), { signal: controller.signal });
         const result = await response.json() as { services?: CatalogItem[]; total?: number; hasMore?: boolean; error?: string };
         if (!response.ok) throw new Error(result.error ?? "Não foi possível carregar o catálogo.");
         const next = result.services ?? [];
@@ -212,7 +213,7 @@ function IssuanceCatalog({ onReady, organizationId }: { onReady: (service: Issue
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-catalog", nationalServiceCodeId: item.id, organizationId }) });
+      const response = await fetch(apiUrl("/api/services"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add-catalog", nationalServiceCodeId: item.id, organizationId }) });
       const result = await response.json() as CatalogServiceResult;
       if (!response.ok) throw new Error(result.error ?? "Não foi possível selecionar o serviço.");
       setItems((current) => current.map((currentItem) => currentItem.id === item.id ? { ...currentItem, added: true } : currentItem));

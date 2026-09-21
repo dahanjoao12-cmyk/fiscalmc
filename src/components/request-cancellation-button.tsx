@@ -2,6 +2,7 @@
 
 import { LoaderCircle, XCircle } from "lucide-react";
 import { useState } from "react";
+import { apiUrl } from "@/lib/base-path";
 
 export function RequestCancellationButton({ invoiceId }: { invoiceId: string }) {
   const [open, setOpen] = useState(false);
@@ -19,7 +20,7 @@ export function RequestCancellationButton({ invoiceId }: { invoiceId: string }) 
   async function submit() {
     setLoading(true); setMessage("");
     try {
-      const response = await fetch(`/api/invoices/${invoiceId}/cancellation-requests`, { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ reason }) });
+      const response = await fetch(apiUrl(`/api/invoices/${invoiceId}/cancellation-requests`), { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ reason }) });
       const body = await response.json() as { error?: string; message?: string };
       setMessage(response.ok ? body.message ?? "Solicitação registrada." : body.error ?? "Não foi possível solicitar o cancelamento." );
       if (response.ok) closeDialog();

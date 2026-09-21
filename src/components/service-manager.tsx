@@ -5,6 +5,7 @@ import { CheckCircle2, MessageSquareWarning, Pencil, Plus, Search, X } from "luc
 import { getServiceReadiness, getServiceTechnicalReadiness } from "@/lib/nfse/service-readiness";
 import { getClientServiceStatusLabel, type ServiceWorkflowStatus } from "@/lib/services/workflow";
 import { StatusBadge, formatDateTime } from "@/components/ui-kit";
+import { apiUrl } from "@/lib/base-path";
 
 export type ManagedService = {
   id: string;
@@ -97,14 +98,14 @@ export function ServiceManager({ organizationId, municipalityCode, initialServic
   useEffect(() => {
     if (!open || !catalogAvailable || selected) return;
     const controller = new AbortController();
-    const timer = setTimeout(() => fetch(`/api/admin/national-service-codes?q=${encodeURIComponent(query)}`, { signal: controller.signal }).then((response) => response.json()).then((result) => setCodes(result.codes ?? [])).catch(() => setError("Não foi possível pesquisar o catálogo.")), 180);
+    const timer = setTimeout(() => fetch(apiUrl(`/api/admin/national-service-codes?q=${encodeURIComponent(query)}`), { signal: controller.signal }).then((response) => response.json()).then((result) => setCodes(result.codes ?? [])).catch(() => setError("Não foi possível pesquisar o catálogo.")), 180);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [open, query, catalogAvailable, selected]);
 
   useEffect(() => {
     if (!selected) return;
     const controller = new AbortController();
-    fetch(`/api/admin/municipal-service-mappings?municipalityCode=${encodeURIComponent(municipalityCode)}&nationalServiceCodeId=${encodeURIComponent(selected.id)}`, { signal: controller.signal })
+    fetch(apiUrl(`/api/admin/municipal-service-mappings?municipalityCode=${encodeURIComponent(municipalityCode)}&nationalServiceCodeId=${encodeURIComponent(selected.id)}`), { signal: controller.signal })
       .then((response) => response.json()).then((result) => setMappings(result.mappings ?? []))
       .catch(() => setError("Não foi possível carregar os de/para municipais."))
       .finally(() => setMappingLoading(false));
@@ -115,7 +116,7 @@ export function ServiceManager({ organizationId, municipalityCode, initialServic
     if (!selected) return;
     const controller = new AbortController();
     setNbsLoading(true);
-    fetch(`/api/admin/nbs-candidates?nationalServiceCodeId=${encodeURIComponent(selected.id)}`, { signal: controller.signal })
+    fetch(apiUrl(`/api/admin/nbs-candidates?nationalServiceCodeId=${encodeURIComponent(selected.id)}`), { signal: controller.signal })
       .then((response) => response.json()).then((result) => setNbsCandidates(result.candidates ?? []))
       .catch(() => {})
       .finally(() => setNbsLoading(false));
@@ -145,7 +146,7 @@ export function ServiceManager({ organizationId, municipalityCode, initialServic
   }
 
   async function loadServices() {
-    const response = await fetch(`/api/admin/organizations/${organizationId}/services`);
+    const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}/services`));
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? "Não foi possível atualizar a lista de serviços.");
     const rows = (result.services ?? []).map((service: ManagedService & { national_service_codes: ManagedService["national_service_codes"] | ManagedService["national_service_codes"][] }) => ({
@@ -160,7 +161,7 @@ export function ServiceManager({ organizationId, municipalityCode, initialServic
     if (!selected || form.name.trim().length < 2) return;
     setSaving(true); setError("");
     const body = editingId ? { action: "update", id: editingId, nationalServiceCodeId: selected.id, ...form } : { nationalServiceCodeId: selected.id, ...form };
-    const response = await fetch(`/api/admin/organizations/${organizationId}/services`, { method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}/services`), { method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const result = await response.json(); setSaving(false);
     if (!response.ok) { setError(result.error ?? "Não foi possível salvar o serviço."); return; }
     try {
@@ -173,7 +174,7 @@ export function ServiceManager({ organizationId, municipalityCode, initialServic
   }
 
   async function setActive(service: ManagedService, active: boolean) {
-    const response = await fetch(`/api/admin/organizations/${organizationId}/services`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set-active", id: service.id, active }) });
+    const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}/services`), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "set-active", id: service.id, active }) });
     const result = await response.json();
     if (response.ok) setServices((rows) => rows.map((row) => row.id === service.id ? { ...row, active, workflow_status: result.workflowStatus } : row));
     else setError(result.error ?? "Não foi possível alterar o status do serviço.");
@@ -182,7 +183,7 @@ export function ServiceManager({ organizationId, municipalityCode, initialServic
   async function review(action: "approve" | "request-info") {
     if (!current) return;
     setSaving(true); setError("");
-    const response = await fetch(`/api/admin/organizations/${organizationId}/services/${current.id}/review`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(action === "approve" ? { action } : { action, message: infoMessage }) });
+    const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}/services/${current.id}/review`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(action === "approve" ? { action } : { action, message: infoMessage }) });
     const result = await response.json(); setSaving(false);
     if (!response.ok) { setError(result.missing?.length ? `${result.error} ${result.missing.join(", ")}.` : result.error ?? "Não foi possível concluir a análise."); return; }
     try { await loadServices(); close(); }

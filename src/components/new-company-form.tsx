@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Building2, ChevronLeft, CircleAlert, LoaderCircle, MapPin, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/base-path";
 
 export type CnaeSecundario={code:string;description:string};
 export type CompanyFormState={
@@ -34,7 +35,7 @@ export function NewCompanyForm({organizationId,initialValues}:{organizationId?:s
     if(cnpj.length!==14)return;
     setLookingUp(true);setLookupNotice("");
     try{
-      const response=await fetch(`/api/admin/organizations/lookup-cnpj?cnpj=${cnpj}`);
+      const response=await fetch(apiUrl(`/api/admin/organizations/lookup-cnpj?cnpj=${cnpj}`));
       const data=await response.json();
       if(!response.ok){setLookupNotice(data.error??"Não foi possível consultar o CNPJ.");return;}
       const found=data.organization;
@@ -65,7 +66,7 @@ export function NewCompanyForm({organizationId,initialValues}:{organizationId?:s
     if(!/^\d{7}$/.test(digits(form.municipalityCode))){setError("Informe o código IBGE de 7 dígitos do município.");return;}
     setSaving(true);
     try{
-      const response=await fetch("/api/admin/organizations",{method:organizationId?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(organizationId?{id:organizationId,...form}:form)});
+      const response=await fetch(apiUrl("/api/admin/organizations"),{method:organizationId?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(organizationId?{id:organizationId,...form}:form)});
       const data=await response.json().catch(()=>null);
       if(!response.ok){setError(data?.error??"Não foi possível criar a empresa. Revise os dados e tente novamente.");return;}
       if(organizationId){router.refresh();return;}

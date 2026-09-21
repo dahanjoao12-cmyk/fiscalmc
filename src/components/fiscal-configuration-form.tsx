@@ -4,6 +4,7 @@ import { CheckCircle2, CircleAlert, LoaderCircle, Save, ShieldCheck } from "luci
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FiscalConfigurationForm as FiscalForm,FiscalConfigurationStatus,FiscalTechnicalConfiguration } from "@/lib/nfse/fiscal-configuration";
+import { apiUrl } from "@/lib/base-path";
 
 type Configuration={status:FiscalConfigurationStatus;missing:string[];form:FiscalForm;technical:FiscalTechnicalConfiguration|null;reviewedAt:string|null;reviewedBy:string|null};
 const statusLabel:Record<FiscalConfigurationStatus,string>={DRAFT:"Rascunho",PENDING_REVIEW:"Pendente de revisão",REVIEWED:"Revisada",INVALID:"Inválida"};
@@ -19,7 +20,7 @@ export function FiscalConfigurationForm({organizationId,initialConfiguration}:{o
   const set=(field:keyof FiscalForm,value:string|null)=>setForm(current=>({...current,[field]:value}));
   async function request(method:"PATCH"|"POST"){
     setSaving(true);setError("");
-    try{const response=await fetch(`/api/admin/organizations/${organizationId}/fiscal`,{method,headers:{"Content-Type":"application/json"},...(method==="PATCH"?{body:JSON.stringify({form,technical})}:{})});const data=await response.json().catch(()=>null);if(!response.ok){setError(data?.error??"Não foi possível atualizar a configuração fiscal.");return;}setConfiguration(data.configuration);setForm(data.configuration.form);if(data.configuration.technical)setTechnical(data.configuration.technical);router.refresh();}catch{setError("Não foi possível atualizar agora. Tente novamente.");}finally{setSaving(false);}
+    try{const response=await fetch(apiUrl(`/api/admin/organizations/${organizationId}/fiscal`),{method,headers:{"Content-Type":"application/json"},...(method==="PATCH"?{body:JSON.stringify({form,technical})}:{})});const data=await response.json().catch(()=>null);if(!response.ok){setError(data?.error??"Não foi possível atualizar a configuração fiscal.");return;}setConfiguration(data.configuration);setForm(data.configuration.form);if(data.configuration.technical)setTechnical(data.configuration.technical);router.refresh();}catch{setError("Não foi possível atualizar agora. Tente novamente.");}finally{setSaving(false);}
   }
   return <section className="fiscal-form-wrap">
     <div className="fiscal-form-heading"><div><p className="eyebrow">Perfil fiscal da empresa</p><h2>Configuração fiscal</h2><p>Registre apenas informações confirmadas. Campos pendentes não são assumidos pelo sistema.</p></div><span className={`status ${configuration.status==="REVIEWED"?"":configuration.status==="INVALID"?"error":"warning"}`}>{statusLabel[configuration.status]}</span></div>

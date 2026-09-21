@@ -3,6 +3,7 @@
 import { AlertTriangle, LoaderCircle, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/base-path";
 
 export function DeleteOrganizationButton({ organizationId, organizationName }: { organizationId: string; organizationName: string }) {
   const router = useRouter();
@@ -14,7 +15,7 @@ export function DeleteOrganizationButton({ organizationId, organizationName }: {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/admin/organizations/${organizationId}`, { method: "DELETE" });
+      const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}`), { method: "DELETE" });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error ?? "Não foi possível remover a empresa.");
       router.push("/admin/empresas");

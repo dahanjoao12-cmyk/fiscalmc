@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/base-path";
 
 export function MunicipalRegistrationForm({ organizationId, initialValue }: { organizationId: string; initialValue: string | null }) {
   const router = useRouter();
@@ -13,7 +14,7 @@ export function MunicipalRegistrationForm({ organizationId, initialValue }: { or
     event.preventDefault();
     setSaving(true); setMessage("");
     try {
-      const response = await fetch(`/api/admin/organizations/${organizationId}/registration`, {
+      const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}/registration`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ municipalRegistration }),

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Pencil, Plus, Search, X } from "lucide-react";
+import { apiUrl } from "@/lib/base-path";
 
 type Customer = {
   id: string;
@@ -50,7 +51,7 @@ export function CustomerManager() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/customers?q=${encodeURIComponent(search)}`);
+      const response = await fetch(apiUrl(`/api/customers?q=${encodeURIComponent(search)}`));
       const data = await response.json();
       if (response.ok) setRows(data.customers ?? []);
       else setError(data.error ?? "Não foi possível carregar os tomadores.");
@@ -99,7 +100,7 @@ export function CustomerManager() {
     setLookingUp(true);
     setLookupNotice("");
     try {
-      const response = await fetch(`/api/customers/lookup-cnpj?cnpj=${cnpj}`);
+      const response = await fetch(apiUrl(`/api/customers/lookup-cnpj?cnpj=${cnpj}`));
       const data = await response.json();
       if (!response.ok) {
         setLookupNotice(data.error ?? "Não foi possível consultar o CNPJ.");
@@ -136,7 +137,7 @@ export function CustomerManager() {
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/customers", {
+      const response = await fetch(apiUrl("/api/customers"), {
         method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editingId ? { id: editingId, ...form } : form)
