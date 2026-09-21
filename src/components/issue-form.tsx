@@ -26,6 +26,7 @@ function maskCurrencyInput(raw: string) {
 
 export function IssueForm({ customers, services, mock = false, issuanceOrganizationId, requiresProductionConfirmation = false, catalogEnabled = false }: Props) {
   const [availableServices, setAvailableServices] = useState(services);
+  const [availableCustomers, setAvailableCustomers] = useState(customers);
   const [selectedCustomerId, setCustomerId] = useState(customers[0]?.id ?? "");
   const [selectedServiceTemplateId, setServiceId] = useState(services[0]?.id ?? "");
   const [amount, setAmount] = useState("");
@@ -40,7 +41,7 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
   const [manualIssRatePercent, setManualIssRatePercent] = useState("");
   const [manualIssRateSourceNote, setManualIssRateSourceNote] = useState("");
   const isOffice = Boolean(issuanceOrganizationId);
-  const customer = customers.find((item) => item.id === selectedCustomerId);
+  const customer = availableCustomers.find((item) => item.id === selectedCustomerId);
   const service = availableServices.find((item) => item.id === selectedServiceTemplateId);
   const needsManualIssRate = isOffice && Boolean(service?.requiresManualIssRate);
   const manualIssRateGiven = !needsManualIssRate || (manualIssRatePercent.trim() !== "" && manualIssRateSourceNote.trim() !== "");
@@ -55,6 +56,11 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
       setServiceId(value);
       if (next?.defaultDescription && description === service?.defaultDescription) setDescription(next.defaultDescription);
     });
+  }
+
+  function selectNewCustomer(next: IssueCustomer) {
+    setAvailableCustomers((current) => [next, ...current]);
+    changed(() => setCustomerId(next.id));
   }
 
   function selectCatalogService(next: IssueService) {
@@ -111,7 +117,7 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
     {error ? <div className="alert error issuance-error" role="alert"><WifiOff size={17} aria-hidden />{error}</div> : null}
     <div className="issuance-layout">
       <form className="issuance-form" onSubmit={(event) => event.preventDefault()}>
-        {step === 0 ? <RecipientStep customers={customers} selectedCustomerId={selectedCustomerId} onChange={(value) => changed(() => setCustomerId(value))} isOffice={Boolean(issuanceOrganizationId)} /> : null}
+        {step === 0 ? <RecipientStep customers={availableCustomers} selectedCustomerId={selectedCustomerId} onChange={(value) => changed(() => setCustomerId(value))} isOffice={isOffice} issuanceOrganizationId={issuanceOrganizationId} onCreated={selectNewCustomer} /> : null}
         {step === 1 ? <ServiceStep services={availableServices} selectedServiceId={selectedServiceTemplateId} onChange={selectService} catalogEnabled={catalogEnabled} onCatalogReady={selectCatalogService} issuanceOrganizationId={issuanceOrganizationId} /> : null}
         {step === 2 ? <ValuesStep amount={amount} date={date} description={description} onAmount={(value) => changed(() => setAmount(value))} onDate={(value) => changed(() => setDate(value))} onDescription={(value) => changed(() => setDescription(value))} /> : null}
         {step === 3 ? <ReviewStep customer={customer} service={service} amount={amount} date={date} description={description} onEdit={goTo} requiresProductionConfirmation={requiresProductionConfirmation} productionConfirmed={productionConfirmed} onConfirm={setProductionConfirmed} needsManualIssRate={needsManualIssRate} manualIssRatePercent={manualIssRatePercent} onManualIssRatePercent={setManualIssRatePercent} manualIssRateSourceNote={manualIssRateSourceNote} onManualIssRateSourceNote={setManualIssRateSourceNote} /> : null}
@@ -123,8 +129,42 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
   </section>;
 }
 
-function RecipientStep({ customers, selectedCustomerId, onChange, isOffice }: { customers: IssueCustomer[]; selectedCustomerId: string; onChange: (value: string) => void; isOffice?: boolean }) {
-  return <section className="issuance-step"><span className="issuance-kicker">Etapa 1</span><h2>Tomador</h2><p>Quem receberá esta nota?</p>{customers.length ? <label className="field"><span>Tomador do serviço</span><select className="input" id="customer" value={selectedCustomerId} onChange={(event) => onChange(event.target.value)}>{customers.map((item) => <option value={item.id} key={item.id}>{item.legalName}{item.taxId ? ` — ${item.taxId}` : ""}</option>)}</select></label> : isOffice ? <div className="v2-inline-empty"><div><strong>Esta empresa ainda não cadastrou nenhum tomador.</strong><p>Somente o próprio cliente cadastra os tomadores dele, pelo portal. Peça para ele entrar e cadastrar o primeiro tomador antes de emitir em nome da empresa.</p></div></div> : <div className="v2-inline-empty"><div><strong>Nenhum tomador cadastrado.</strong><p>Cadastre um tomador sem perder os dados desta emissão.</p></div><Link className="button secondary" href="/app/tomadores"><UserPlus size={17} aria-hidden />Novo tomador</Link></div>}</section>;
+function RecipientStep({ customers, selectedCustomerId, onChange, isOffice, issuanceOrganizationId, onCreated }: { customers: IssueCustomer[]; selectedCustomerId: string; onChange: (value: string) => void; isOffice?: boolean; issuanceOrganizationId?: string; onCreated?: (customer: IssueCustomer) => void }) {
+  return <section className="issuance-step"><span className="issuance-kicker">Etapa 1</span><h2>Tomador</h2><p>Quem receberá esta nota?</p>{customers.length ? <label className="field"><span>Tomador do serviço</span><select className="input" id="customer" value={selectedCustomerId} onChange={(event) => onChange(event.target.value)}>{customers.map((item) => <option value={item.id} key={item.id}>{item.legalName}{item.taxId ? ` — ${item.taxId}` : ""}</option>)}</select></label> : null}
+    {isOffice && issuanceOrganizationId ? <OfficeAddCustomer organizationId={issuanceOrganizationId} hasCustomers={customers.length > 0} onCreated={(customer) => onCreated?.(customer)} /> : !customers.length ? <div className="v2-inline-empty"><div><strong>Nenhum tomador cadastrado.</strong><p>Cadastre um tomador sem perder os dados desta emissão.</p></div><Link className="button secondary" href="/app/tomadores"><UserPlus size={17} aria-hidden />Novo tomador</Link></div> : null}
+  </section>;
+}
+
+function OfficeAddCustomer({ organizationId, hasCustomers, onCreated }: { organizationId: string; hasCustomers: boolean; onCreated: (customer: IssueCustomer) => void }) {
+  const [open, setOpen] = useState(!hasCustomers);
+  const [legalName, setLegalName] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function create() {
+    setSaving(true);
+    setError("");
+    try {
+      const digits = taxId.replace(/\D/g, "");
+      const personType = digits.length === 14 ? "COMPANY" : digits.length === 11 ? "INDIVIDUAL" : null;
+      if (!personType) { setError("Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido."); return; }
+      const response = await fetch(apiUrl(`/api/admin/organizations/${organizationId}/customers`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ personType, taxId, legalName }) });
+      const result = await response.json() as { customer?: { id: string; legal_name: string; tax_id: string | null }; error?: string };
+      if (!response.ok || !result.customer) { setError(result.error ?? "Não foi possível cadastrar o tomador."); return; }
+      onCreated({ id: result.customer.id, legalName: result.customer.legal_name, taxId: result.customer.tax_id });
+      setOpen(false);
+      setLegalName("");
+      setTaxId("");
+    } catch {
+      setError("Não foi possível cadastrar o tomador.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) return <button className="text-button" type="button" onClick={() => setOpen(true)}><UserPlus size={15} aria-hidden />+ Cadastrar novo tomador</button>;
+  return <div className="mapping-create"><label>Razão social / Nome<input className="input" value={legalName} onChange={(event) => setLegalName(event.target.value)} placeholder="Nome do tomador" /></label><label>CPF ou CNPJ<input className="input" value={taxId} onChange={(event) => setTaxId(event.target.value)} placeholder="Somente números ou formatado" /></label>{error ? <p className="alert error">{error}</p> : null}<div className="v2-inline-actions">{hasCustomers ? <button className="button ghost compact" type="button" onClick={() => setOpen(false)} disabled={saving}>Cancelar</button> : null}<button className="button secondary compact" type="button" onClick={create} disabled={saving || legalName.trim().length < 2 || !taxId.trim()}>{saving ? "Cadastrando…" : "Cadastrar tomador"}</button></div></div>;
 }
 
 function ServiceStep({ services, selectedServiceId, onChange, catalogEnabled, onCatalogReady, issuanceOrganizationId }: { services: IssueService[]; selectedServiceId: string; onChange: (value: string) => void; catalogEnabled: boolean; onCatalogReady: (service: IssueService) => void; issuanceOrganizationId?: string }) {
