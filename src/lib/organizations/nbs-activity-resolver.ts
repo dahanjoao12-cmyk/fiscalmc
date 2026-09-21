@@ -23,6 +23,11 @@ const allNbs: NbsCandidate[] = (() => {
  */
 export function searchNbsCatalog(query: string, limit = 60): NbsCandidate[] {
   const q = query.trim().toLocaleLowerCase("pt-BR");
-  const pool = q ? allNbs.filter((item) => item.nbsDisplayCode.toLowerCase().includes(q) || item.nbsDescription.toLocaleLowerCase("pt-BR").includes(q)) : allNbs;
+  const qDigits = query.replace(/\D/g, "");
+  const pool = q
+    ? allNbs.filter((item) => item.nbsDisplayCode.toLowerCase().includes(q)
+      || item.nbsDescription.toLocaleLowerCase("pt-BR").includes(q)
+      || (qDigits.length >= 2 && item.nbsCode.includes(qDigits)))
+    : allNbs;
   return pool.slice(0, limit);
 }
