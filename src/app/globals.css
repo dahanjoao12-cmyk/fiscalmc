@@ -327,6 +327,9 @@ textarea.input { min-height:108px; padding-top:14px; resize:vertical; }
 .v2-panel-heading { min-height:66px; padding:17px 20px; display:flex; align-items:center; justify-content:space-between; gap:18px; border-bottom:1px solid var(--border); }
 .v2-panel-heading h2 { margin:0; color:var(--navy); font-size:17px; letter-spacing:-.015em; }
 .v2-panel-heading p { margin:5px 0 0; color:var(--muted); font-size:12px; }
+.v2-panel-subsection { padding:20px; border-top:1px solid var(--border); }
+.v2-panel-subsection h3 { margin:0; color:var(--navy); font-size:14px; letter-spacing:-.01em; }
+.v2-panel-subsection > p { margin:5px 0 16px; color:var(--muted); font-size:12px; }
 .v2-text-action { display:inline-flex; align-items:center; gap:5px; color:var(--orange-dark); font-size:13px; font-weight:750; }
 .v2-table-scroll { overflow-x:auto; }
 .v2-table { width:100%; border-collapse:collapse; font-size:12.5px; }

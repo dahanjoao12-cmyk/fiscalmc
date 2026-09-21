@@ -86,7 +86,8 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
           <StatusBadge tone={item.ready ? item.warning ? "warning" : "success" : "warning"}>{item.ready ? item.warning ? "Atenção" : "Concluído" : "Pendente"}</StatusBadge>
           <Link href={`/admin/empresas/${id}?tab=${readinessTabs[item.key]}`}>{item.ready ? "Revisar" : "Resolver"}<ArrowRight size={15} /></Link>
         </div>)}</div>
-      </section><MunicipalRegistrationForm organizationId={company.id} initialValue={company.municipal_registration} /></div>
+        <MunicipalRegistrationForm organizationId={company.id} initialValue={company.municipal_registration} />
+      </section></div>
       <aside className="v2-company-aside">
         <section className="v2-panel"><div className="v2-panel-heading"><div><h2>Resumo da empresa</h2></div></div><dl className="v2-definition-list">
           <div><dt>Regime</dt><dd>{taxProfileResult.data?.tax_regime?.replaceAll("_", " ") ?? "Pendente"}</dd></div>
