@@ -67,7 +67,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
     clientAccess: clientAccessResult?.readiness ?? { ready: false, message: "Acesso do cliente não cadastrado." },
   });
   const issueCustomers: IssueCustomer[] = (customersResult.data ?? []).map((item) => ({ id: item.id, legalName: item.legal_name, taxId: item.tax_id }));
-  const issueServices: IssueService[] = readyServices.map((item) => ({ id: item.id, name: item.name, defaultDescription: item.default_description }));
+  const issueServices: IssueService[] = readyServices.map((item) => ({ id: item.id, name: item.name, defaultDescription: item.default_description, requiresManualIssRate: item.iss_taxation !== "3" && item.iss_taxation !== "4" && item.iss_rate_source !== "PARAMETRIZED_BY_NATIONAL" && !item.municipal_service_mapping_id }));
   const pendingItems = organizationReadiness.items.filter((item) => !item.ready || item.warning);
 
   return <div className="page v2-page company-detail-page">

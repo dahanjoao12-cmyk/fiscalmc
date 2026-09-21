@@ -42,7 +42,7 @@ async function persistIssuedArtifactsBestEffort(input:{invoiceId:string;organiza
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 
-const schema=z.object({organizationId:z.uuid().optional(),serviceTemplateId:z.uuid(),customerId:z.uuid(),amount:z.union([z.string(),z.number()]),serviceDate:z.iso.date(),description:z.string().trim().min(3).max(1000),productionConfirmation:z.boolean().optional(),scenario:z.enum(["success","rejection","timeout"]).optional()});
+const schema=z.object({organizationId:z.uuid().optional(),serviceTemplateId:z.uuid(),customerId:z.uuid(),amount:z.union([z.string(),z.number()]),serviceDate:z.iso.date(),description:z.string().trim().min(3).max(1000),productionConfirmation:z.boolean().optional(),scenario:z.enum(["success","rejection","timeout"]).optional(),manualIssRateBasisPoints:z.number().int().min(0).max(10000).optional(),manualIssRateSourceNote:z.string().trim().min(3).max(500).optional()});
 const idempotencySchema=z.uuid();
 type Input=z.infer<typeof schema>;
 
@@ -103,7 +103,7 @@ export async function POST(request:Request){
     const invoiceEnvironment=nationalEnvironment?.environment??"PRODUCTION_RESTRICTED";
 
     stage="FISCAL_RESOLUTION";
-    const fiscal=await resolveFiscalConfiguration({organizationId:session.organizationId,municipalityCode:organization.municipality_code,nationalTaxCode:service.national_tax_code,municipalServiceCode:service.municipal_service_code,dpsMunicipalTaxCode:service.dps_municipal_tax_code,nbsCode:service.nbs_code,issTaxation:service.iss_taxation,issRateSource:service.iss_rate_source,fiscalReference:service.fiscal_reference,taxRegime:profile.tax_regime,reviewedAt:profile.reviewed_at,serviceDate:effective.serviceDate,dpsConfiguration:profile.dps_configuration});
+    const fiscal=await resolveFiscalConfiguration({organizationId:session.organizationId,municipalityCode:organization.municipality_code,nationalTaxCode:service.national_tax_code,municipalServiceCode:service.municipal_service_code,dpsMunicipalTaxCode:service.dps_municipal_tax_code,nbsCode:service.nbs_code,issTaxation:service.iss_taxation,issRateSource:service.iss_rate_source,fiscalReference:service.fiscal_reference,taxRegime:profile.tax_regime,reviewedAt:profile.reviewed_at,serviceDate:effective.serviceDate,dpsConfiguration:profile.dps_configuration,...(session.actorType==="OFFICE"&&requested.manualIssRateBasisPoints!==undefined&&requested.manualIssRateSourceNote?{manualRateBasisPoints:requested.manualIssRateBasisPoints,manualRateSourceNote:requested.manualIssRateSourceNote}:{})});
     let invoice=existing;
     let dpsNumber=existing?.dps_number;
     if(!invoice){stage="RESERVE_DPS";dpsNumber=await reserveDpsNumber(authenticatedClient,{organizationId:session.organizationId,series:"00001",environment:invoiceEnvironment});}
@@ -120,7 +120,7 @@ export async function POST(request:Request){
     }
     if(!invoice)throw new Error("INVOICE_PERSIST_FAILED");
     stage="AUDIT_INSERT";
-    const audit=await admin.from("audit_logs").insert({organization_id:session.organizationId,actor_user_id:session.actorUserId,actor_type:session.actorType,action:"invoice_requested",entity:"invoice",entity_id:invoice.id,request_id:requestId,safe_metadata:{}});
+    const audit=await admin.from("audit_logs").insert({organization_id:session.organizationId,actor_user_id:session.actorUserId,actor_type:session.actorType,action:"invoice_requested",entity:"invoice",entity_id:invoice.id,request_id:requestId,safe_metadata:{issSource:fiscal.iss.source,...(fiscal.manualRateSourceNote?{manualIssRateBasisPoints:fiscal.iss.rateBasisPoints,manualIssRateSourceNote:fiscal.manualRateSourceNote}:{})}});
     if(audit.error)throw new Error("INVOICE_AUDIT_FAILED");
     const attemptRequestId=crypto.randomUUID();
     logEvent("info","INVOICE_REQUESTED",{requestId,organizationId:session.organizationId,idempotencyKey});

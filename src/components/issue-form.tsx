@@ -8,7 +8,7 @@ import { canAdvanceClientIssuance, clientIssuanceSteps, getCatalogSelectionOutco
 import { apiUrl } from "@/lib/base-path";
 
 export type IssueCustomer = { id: string; legalName: string; taxId?: string | null };
-export type IssueService = { id: string; name: string; defaultDescription?: string | null };
+export type IssueService = { id: string; name: string; defaultDescription?: string | null; requiresManualIssRate?: boolean };
 type Props = { customers: IssueCustomer[]; services: IssueService[]; mock?: boolean; issuanceOrganizationId?: string; requiresProductionConfirmation?: boolean; catalogEnabled?: boolean };
 type Result = { status: "ISSUED" | "REJECTED" | "UNKNOWN"; invoiceId?: string; nfseNumber?: string | null; safeMessage: string };
 type CatalogItem = { id: string; description: string; added: boolean };
@@ -37,9 +37,15 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
   const [error, setError] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [productionConfirmed, setProductionConfirmed] = useState(false);
+  const [manualIssRatePercent, setManualIssRatePercent] = useState("");
+  const [manualIssRateSourceNote, setManualIssRateSourceNote] = useState("");
+  const isOffice = Boolean(issuanceOrganizationId);
   const customer = customers.find((item) => item.id === selectedCustomerId);
   const service = availableServices.find((item) => item.id === selectedServiceTemplateId);
+  const needsManualIssRate = isOffice && Boolean(service?.requiresManualIssRate);
+  const manualIssRateGiven = !needsManualIssRate || (manualIssRatePercent.trim() !== "" && manualIssRateSourceNote.trim() !== "");
   const canContinue = canAdvanceClientIssuance({ step, hasCustomer: Boolean(customer), hasService: Boolean(service), amount, date, description });
+  const canIssue = canContinue && manualIssRateGiven;
 
   function changed(action: () => void) { action(); setError(""); }
   function goTo(next: ClientIssuanceStep) { setError(""); setStep(next); }
@@ -60,10 +66,11 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
   }
 
   async function issue() {
-    if (step !== 3 || !canContinue) return;
+    if (step !== 3 || !canIssue) return;
     setSubmitting(true);
     setStep(4);
     try {
+      const manualIssRateBasisPoints = needsManualIssRate ? Math.round(parseFloat(manualIssRatePercent.replace(",", ".")) * 100) : undefined;
       const response = await fetch(apiUrl("/api/invoices"), {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
@@ -76,6 +83,7 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
           description,
           ...(requiresProductionConfirmation ? { productionConfirmation: productionConfirmed } : {}),
           ...(mock ? { scenario: "success" } : {}),
+          ...(manualIssRateBasisPoints !== undefined && !Number.isNaN(manualIssRateBasisPoints) ? { manualIssRateBasisPoints, manualIssRateSourceNote: manualIssRateSourceNote.trim() } : {}),
         }),
       });
       const payload = await response.json() as Result & { error?: string };
@@ -106,9 +114,9 @@ export function IssueForm({ customers, services, mock = false, issuanceOrganizat
         {step === 0 ? <RecipientStep customers={customers} selectedCustomerId={selectedCustomerId} onChange={(value) => changed(() => setCustomerId(value))} isOffice={Boolean(issuanceOrganizationId)} /> : null}
         {step === 1 ? <ServiceStep services={availableServices} selectedServiceId={selectedServiceTemplateId} onChange={selectService} catalogEnabled={catalogEnabled} onCatalogReady={selectCatalogService} issuanceOrganizationId={issuanceOrganizationId} /> : null}
         {step === 2 ? <ValuesStep amount={amount} date={date} description={description} onAmount={(value) => changed(() => setAmount(value))} onDate={(value) => changed(() => setDate(value))} onDescription={(value) => changed(() => setDescription(value))} /> : null}
-        {step === 3 ? <ReviewStep customer={customer} service={service} amount={amount} date={date} description={description} onEdit={goTo} requiresProductionConfirmation={requiresProductionConfirmation} productionConfirmed={productionConfirmed} onConfirm={setProductionConfirmed} /> : null}
+        {step === 3 ? <ReviewStep customer={customer} service={service} amount={amount} date={date} description={description} onEdit={goTo} requiresProductionConfirmation={requiresProductionConfirmation} productionConfirmed={productionConfirmed} onConfirm={setProductionConfirmed} needsManualIssRate={needsManualIssRate} manualIssRatePercent={manualIssRatePercent} onManualIssRatePercent={setManualIssRatePercent} manualIssRateSourceNote={manualIssRateSourceNote} onManualIssRateSourceNote={setManualIssRateSourceNote} /> : null}
         {step === 4 ? <ProcessingState /> : null}
-        {step < 4 ? <IssuanceActions step={step} canContinue={canContinue} submitting={submitting} requiresProductionConfirmation={requiresProductionConfirmation} productionConfirmed={productionConfirmed} onBack={() => goTo((step - 1) as ClientIssuanceStep)} onContinue={() => goTo((step + 1) as ClientIssuanceStep)} onIssue={issue} /> : null}
+        {step < 4 ? <IssuanceActions step={step} canContinue={canContinue} canIssue={canIssue} submitting={submitting} requiresProductionConfirmation={requiresProductionConfirmation} productionConfirmed={productionConfirmed} onBack={() => goTo((step - 1) as ClientIssuanceStep)} onContinue={() => goTo((step + 1) as ClientIssuanceStep)} onIssue={issue} /> : null}
       </form>
       <IssuanceSummary customer={customer} service={service} amount={amount} date={date} description={description} showOnMobile={step === 3} />
     </div>
@@ -238,13 +246,13 @@ function ValuesStep({ amount, date, description, onAmount, onDate, onDescription
   return <section className="issuance-step"><span className="issuance-kicker">Etapa 3</span><h2>Valores</h2><p>Informe a data e o valor do serviço.</p><div className="issuance-value-grid"><label className="field"><span>Data da prestação</span><input className="input" id="date" type="date" value={date} onChange={(event) => onDate(event.target.value)} /></label><label className="field issuance-amount"><span>Valor</span><div className="money-input"><span>R$</span><input className="input" id="amount" inputMode="decimal" value={amount} placeholder="0,00" onChange={(event) => onAmount(maskCurrencyInput(event.target.value))} /></div></label></div><label className="field"><span>Descrição</span><textarea className="input" id="description" value={description} maxLength={1000} onChange={(event) => onDescription(event.target.value)} /></label></section>;
 }
 
-function ReviewStep({ customer, service, amount, date, description, onEdit, requiresProductionConfirmation, productionConfirmed, onConfirm }: { customer?: IssueCustomer; service?: IssueService; amount: string; date: string; description: string; onEdit: (step: ClientIssuanceStep) => void; requiresProductionConfirmation: boolean; productionConfirmed: boolean; onConfirm: (value: boolean) => void }) {
-  return <section className="issuance-step issuance-review"><span className="issuance-kicker">Etapa 4</span><h2>Revisão</h2><p>Confira os dados antes de emitir.</p><dl><div><dt>Tomador</dt><dd><strong>{customer?.legalName ?? "Não informado"}</strong>{customer?.taxId ? <small>{customer.taxId}</small> : null}</dd><button type="button" onClick={() => onEdit(0)}>Editar</button></div><div><dt>Serviço</dt><dd><strong>{service?.name ?? "Não informado"}</strong><small>{service?.defaultDescription ?? ""}</small></dd><button type="button" onClick={() => onEdit(1)}>Editar</button></div><div><dt>Data da prestação</dt><dd><strong>{formatDate(date)}</strong></dd></div><div><dt>Valor</dt><dd className="issuance-review-total"><strong>{formatAmount(amount)}</strong></dd></div><div><dt>Descrição</dt><dd><strong>{description || "Não informado"}</strong></dd><button type="button" onClick={() => onEdit(2)}>Editar</button></div></dl>{requiresProductionConfirmation ? <section className="alert warning issuance-production-confirmation" aria-label="Confirmação de Produção"><strong>AMBIENTE: PRODUÇÃO</strong><p>Esta NFS-e terá validade fiscal.</p><label><input type="checkbox" checked={productionConfirmed} onChange={(event) => onConfirm(event.target.checked)} /> Confirmo a revisão desta operação e autorizo a emissão em Produção.</label></section> : null}</section>;
+function ReviewStep({ customer, service, amount, date, description, onEdit, requiresProductionConfirmation, productionConfirmed, onConfirm, needsManualIssRate, manualIssRatePercent, onManualIssRatePercent, manualIssRateSourceNote, onManualIssRateSourceNote }: { customer?: IssueCustomer; service?: IssueService; amount: string; date: string; description: string; onEdit: (step: ClientIssuanceStep) => void; requiresProductionConfirmation: boolean; productionConfirmed: boolean; onConfirm: (value: boolean) => void; needsManualIssRate: boolean; manualIssRatePercent: string; onManualIssRatePercent: (value: string) => void; manualIssRateSourceNote: string; onManualIssRateSourceNote: (value: string) => void }) {
+  return <section className="issuance-step issuance-review"><span className="issuance-kicker">Etapa 4</span><h2>Revisão</h2><p>Confira os dados antes de emitir.</p><dl><div><dt>Tomador</dt><dd><strong>{customer?.legalName ?? "Não informado"}</strong>{customer?.taxId ? <small>{customer.taxId}</small> : null}</dd><button type="button" onClick={() => onEdit(0)}>Editar</button></div><div><dt>Serviço</dt><dd><strong>{service?.name ?? "Não informado"}</strong><small>{service?.defaultDescription ?? ""}</small></dd><button type="button" onClick={() => onEdit(1)}>Editar</button></div><div><dt>Data da prestação</dt><dd><strong>{formatDate(date)}</strong></dd></div><div><dt>Valor</dt><dd className="issuance-review-total"><strong>{formatAmount(amount)}</strong></dd></div><div><dt>Descrição</dt><dd><strong>{description || "Não informado"}</strong></dd><button type="button" onClick={() => onEdit(2)}>Editar</button></div></dl>{needsManualIssRate ? <section className="alert warning issuance-manual-iss-rate"><strong>Esta empresa não tem de/para municipal cadastrado para este serviço</strong><p>Informe a alíquota de ISS confirmada e de onde ela veio (lei municipal, Econet, etc.). Isso fica registrado nesta nota.</p><label className="field"><span>Alíquota do ISS (%)</span><input className="input" inputMode="decimal" value={manualIssRatePercent} onChange={(event) => onManualIssRatePercent(event.target.value)} placeholder="Ex.: 2" /></label><label className="field"><span>Fonte da alíquota</span><input className="input" value={manualIssRateSourceNote} onChange={(event) => onManualIssRateSourceNote(event.target.value)} placeholder="Ex.: LC 966/2022, Tabela XII, item 4.01 — Porto Alegre/RS" /></label></section> : null}{requiresProductionConfirmation ? <section className="alert warning issuance-production-confirmation" aria-label="Confirmação de Produção"><strong>AMBIENTE: PRODUÇÃO</strong><p>Esta NFS-e terá validade fiscal.</p><label><input type="checkbox" checked={productionConfirmed} onChange={(event) => onConfirm(event.target.checked)} /> Confirmo a revisão desta operação e autorizo a emissão em Produção.</label></section> : null}</section>;
 }
 
-function IssuanceActions({ step, canContinue, submitting, requiresProductionConfirmation, productionConfirmed, onBack, onContinue, onIssue }: { step: ClientIssuanceStep; canContinue: boolean; submitting: boolean; requiresProductionConfirmation: boolean; productionConfirmed: boolean; onBack: () => void; onContinue: () => void; onIssue: () => void }) {
+function IssuanceActions({ step, canContinue, canIssue, submitting, requiresProductionConfirmation, productionConfirmed, onBack, onContinue, onIssue }: { step: ClientIssuanceStep; canContinue: boolean; canIssue: boolean; submitting: boolean; requiresProductionConfirmation: boolean; productionConfirmed: boolean; onBack: () => void; onContinue: () => void; onIssue: () => void }) {
   const finalReview = step === 3;
-  return <footer className="issuance-actions">{step > 0 ? <button className="button secondary" type="button" disabled={submitting} onClick={onBack}><ChevronLeft size={18} aria-hidden />Voltar</button> : <span />}{finalReview ? <button className="button primary" type="button" disabled={!canContinue || submitting || (requiresProductionConfirmation && !productionConfirmed)} onClick={onIssue}><Send size={18} aria-hidden />Emitir NFS-e</button> : <button className="button primary" type="button" disabled={!canContinue || submitting} onClick={onContinue}>Continuar<ChevronRight size={18} aria-hidden /></button>}</footer>;
+  return <footer className="issuance-actions">{step > 0 ? <button className="button secondary" type="button" disabled={submitting} onClick={onBack}><ChevronLeft size={18} aria-hidden />Voltar</button> : <span />}{finalReview ? <button className="button primary" type="button" disabled={!canIssue || submitting || (requiresProductionConfirmation && !productionConfirmed)} onClick={onIssue}><Send size={18} aria-hidden />Emitir NFS-e</button> : <button className="button primary" type="button" disabled={!canContinue || submitting} onClick={onContinue}>Continuar<ChevronRight size={18} aria-hidden /></button>}</footer>;
 }
 
 function IssuanceSummary({ customer, service, amount, date, description, showOnMobile }: { customer?: IssueCustomer; service?: IssueService; amount: string; date: string; description: string; showOnMobile: boolean }) {

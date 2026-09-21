@@ -32,35 +32,10 @@ describe("service template readiness", () => {
     expect(imune.ready).toBe(true);
     expect(imune.missing).not.toContain("De/para municipal");
   });
-  it("não aceita código municipal sem de/para selecionado", () => {
-    const readiness = getServiceReadiness({ ...complete, municipal_service_mapping_id: null });
-    expect(readiness.ready).toBe(false);
-    expect(readiness.missing).toContain("De/para municipal");
-  });
-  it("aceita a referência de DPS de produção apenas no cenário parametrizado pelo Sistema Nacional", () => {
-    const acceptedReference = {
-      source: "ACCEPTED_PRODUCTION_DPS",
-      referenceNFse: "398",
-      referenceDps: "395",
-      referenceCompetence: "2026-09-02",
-      cTribNac: "171901",
-      cTribMun: "001",
-      cNbs: "113022100",
-      issTaxation: "1",
-      issWithholding: "1",
-    };
-    const service = {
-      ...complete,
-      national_tax_code: "171901",
-      municipal_service_code: null,
-      municipal_service_mapping_id: null,
-      dps_municipal_tax_code: "001",
-      nbs_code: "113022100",
-      iss_rate_source: "PARAMETRIZED_BY_NATIONAL",
-      fiscal_reference: acceptedReference,
-    };
-    expect(getServiceReadiness(service).ready).toBe(true);
-    expect(getServiceReadiness({ ...service, iss_rate_source: "EMITTER_PROVIDED" }).ready).toBe(false);
+  it("aprova um serviço sem de/para municipal — a alíquota é resolvida na emissão, não no cadastro", () => {
+    const readiness = getServiceReadiness({ ...complete, municipal_service_mapping_id: null, municipal_service_code: null });
+    expect(readiness.ready).toBe(true);
+    expect(readiness.missing).not.toContain("De/para municipal");
   });
   it("exige a fonte do código DPS antes da revisão", () => {
     const readiness = getServiceReadiness({ ...complete, dps_municipal_tax_code_source: null });
@@ -74,7 +49,7 @@ describe("service template readiness", () => {
   });
   it("permite AUTO_READY somente com a mesma configuração técnica completa", () => {
     expect(getServiceReadiness({ ...complete, workflow_status: "AUTO_READY", reviewed_at: null, reviewed_by: null }).ready).toBe(true);
-    expect(getServiceReadiness({ ...complete, workflow_status: "AUTO_READY", reviewed_at: null, reviewed_by: null, municipal_service_mapping_id: null }).ready).toBe(false);
+    expect(getServiceReadiness({ ...complete, workflow_status: "AUTO_READY", reviewed_at: null, reviewed_by: null, nbs_code: null }).ready).toBe(false);
   });
   it("só torna um serviço pronto quando ativo, revisado e auditável", () => {
     expect(getServiceReadiness(complete).ready).toBe(true);

@@ -1,5 +1,5 @@
 import type { ServiceWorkflowStatus } from "@/lib/services/workflow";
-import { issRateSourceSchema, matchesAcceptedProductionDpsReference } from "./service-fiscal-reference";
+import { issRateSourceSchema } from "./service-fiscal-reference";
 
 export type ServiceReadinessInput = {
   active: boolean;
@@ -22,19 +22,11 @@ export type ServiceReadinessInput = {
 export function getServiceTechnicalReadiness(service: ServiceReadinessInput) {
   const missing: string[] = [];
   if (!service.national_service_code_id || !service.national_tax_code) missing.push("Código nacional");
-  const acceptedReference = matchesAcceptedProductionDpsReference(service.fiscal_reference, {
-    nationalTaxCode: service.national_tax_code ?? "",
-    municipalTaxCode: service.dps_municipal_tax_code ?? "",
-    nbsCode: service.nbs_code,
-  });
-  const issExempt = service.iss_taxation === "3" || service.iss_taxation === "4";
-  if (
-    !issExempt
-    && (!service.municipal_service_mapping_id || !service.municipal_service_code)
-    && !(acceptedReference && service.iss_rate_source === "PARAMETRIZED_BY_NATIONAL")
-  ) {
-    missing.push("De/para municipal");
-  }
+  // De/para municipal is no longer required to approve a service: when a
+  // company has no municipal mapping on file, the office confirms the ISS
+  // rate manually at the moment of issuance instead (with a cited source),
+  // rather than blocking the whole service on a lookup some municipalities
+  // don't even expose. See resolveFiscalConfiguration's manual-rate branch.
   if (service.dps_municipal_tax_code && !service.dps_municipal_tax_code_source) missing.push("Fonte do código DPS municipal");
   if (!service.service_location_municipality_code) missing.push("Município de prestação");
   if (!service.nbs_code) missing.push("Código NBS");
