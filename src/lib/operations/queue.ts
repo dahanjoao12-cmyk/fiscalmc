@@ -1,7 +1,7 @@
 import { CERTIFICATE_EXPIRING_SOON_DAYS, type StoredCertificateStatus } from "@/lib/nfse/certificate/status";
 
 export type OperationalPriority = "CRITICAL" | "HIGH" | "NORMAL";
-export type OperationalItemType = "INVOICE_UNKNOWN" | "INVOICE_REJECTED" | "CERTIFICATE_EXPIRING" | "CERTIFICATE_EXPIRED" | "SERVICE_PENDING_REVIEW" | "SERVICE_NEEDS_INFO" | "ORGANIZATION_NOT_READY" | "CLIENT_ACCESS_INVALID" | "CANCELLATION_PENDING";
+export type OperationalItemType = "INVOICE_UNKNOWN" | "INVOICE_REJECTED" | "CERTIFICATE_EXPIRING" | "CERTIFICATE_EXPIRED" | "SERVICE_PENDING_REVIEW" | "SERVICE_NEEDS_INFO" | "SERVICE_DRAFT_INCOMPLETE" | "ORGANIZATION_NOT_READY" | "CLIENT_ACCESS_INVALID" | "CANCELLATION_PENDING";
 export type OperationalItem = { id: string; organizationId: string; organizationName: string; type: OperationalItemType; title: string; description: string; priority: OperationalPriority; createdAt: string; updatedAt: string; href: string };
 
 export function getOperationalPriority(type: OperationalItemType, input?: { ageHours?: number }): OperationalPriority {
