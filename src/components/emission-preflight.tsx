@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { CheckCircle2, LoaderCircle, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, LoaderCircle, ShieldCheck, XCircle } from "lucide-react";
 import { apiUrl } from "@/lib/base-path";
 
 type PreflightResult = {
@@ -109,15 +109,15 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
   }
 
   if (!canRun) return null;
-  return <section className="v2-panel emission-preflight">
-    <div className="v2-panel-heading">
+  return <details className="v2-panel emission-preflight">
+    <summary className="v2-panel-heading">
       <div>
-        <p className="eyebrow">Pré-validação da emissão</p>
+        <p className="eyebrow">Diagnóstico técnico</p>
         <h2>Validar antes de transmitir</h2>
         <p>Monta e assina uma DPS de teste no servidor, sem criar nota, reservar sequência ou transmitir.</p>
       </div>
-      <ShieldCheck size={22} aria-hidden="true" />
-    </div>
+      <span className="emission-preflight-summary-icons"><ShieldCheck size={22} aria-hidden="true" /><ChevronDown className="emission-preflight-chevron" size={18} aria-hidden="true" /></span>
+    </summary>
     <form className="emission-preflight-form" onSubmit={run}>
       <p className="form-help full">Os dados são usados somente nesta validação autenticada e não criam uma nota.</p>
       <label>CNPJ do tomador<input value={operation.taxId} onChange={(event) => updateField("taxId", event.target.value)} inputMode="numeric" required /></label>
@@ -149,7 +149,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
       <p>Alíquota na DPS: <strong>{result.validation.pAliqEmitted ? "informada" : "não informada"}</strong></p>
       <p>Transmissão: <strong>NÃO EXECUTADA</strong></p>
     </div> : null}
-  </section>;
+  </details>;
 }
 
 function StatusLine({ label, passed }: { label: string; passed: boolean }) {

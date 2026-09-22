@@ -751,6 +751,12 @@ textarea.input { min-height:92px; }
 .request-info-block .button { margin-top:12px; }
 .service-analysis-actions { padding:16px 24px; display:flex; justify-content:flex-end; gap:9px; background:var(--surface); }
 .emission-preflight { margin-bottom:18px; }
+.emission-preflight > summary { cursor:pointer; list-style:none; }
+.emission-preflight > summary::-webkit-details-marker { display:none; }
+.emission-preflight:not([open]) > summary.v2-panel-heading { border-bottom:0; }
+.emission-preflight-summary-icons { display:flex; align-items:center; gap:10px; color:var(--muted); }
+.emission-preflight-chevron { transition:transform .15s ease; }
+.emission-preflight[open] .emission-preflight-chevron { transform:rotate(180deg); }
 .emission-preflight-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 16px; padding:16px 20px; }
 .emission-preflight-form label { display:grid; gap:6px; color:var(--muted); font-size:12px; font-weight:650; }
 .emission-preflight-form input,.emission-preflight-form textarea { width:100%; }
