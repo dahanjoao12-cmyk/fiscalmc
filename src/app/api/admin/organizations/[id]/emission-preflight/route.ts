@@ -25,6 +25,7 @@ const DRY_RUN_SERIES = "00000";
 const DRY_RUN_NUMBER = 999999999999999n;
 const digits = (value: string) => value.replace(/\D/g, "");
 const operationSchema = z.object({
+  serviceTemplateId: z.string().uuid(),
   customer: z.object({
     taxId: z.string().transform(digits).refine((value) => value.length === 14),
     legalName: z.string().trim().min(2).max(180),
@@ -65,7 +66,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const [organizationResult, profileResult, serviceResult, certificateResult, clientAccessResult] = await Promise.all([
       db.from("organizations").select("id,legal_name,tax_id,municipal_registration,municipality_code,postal_code,street,address_number,address_complement,neighborhood,state,email,phone").eq("id", organizationId).maybeSingle(),
       db.from("tax_profiles").select("tax_regime,dps_configuration,reviewed_at,reviewed_by").eq("organization_id", organizationId).maybeSingle(),
-      db.from("service_templates").select("id,name,active,workflow_status,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by").eq("organization_id", organizationId).eq("national_tax_code", "171901").eq("workflow_status", "REVIEWED").eq("active", true).maybeSingle(),
+      db.from("service_templates").select("id,name,active,workflow_status,national_service_code_id,national_tax_code,municipal_service_code,municipal_service_mapping_id,dps_municipal_tax_code,dps_municipal_tax_code_source,service_location_municipality_code,nbs_code,iss_taxation,iss_rate_source,fiscal_reference,reviewed_at,reviewed_by").eq("organization_id", organizationId).eq("id", operation.data.serviceTemplateId).maybeSingle(),
       db.from("digital_certificates").select("status,owner_tax_id,valid_until").eq("organization_id", organizationId).is("replaced_at", null).maybeSingle(),
       createClientAccessService(db).getSummary(organizationId),
     ]);
@@ -77,6 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     stage = "READINESS";
     const fiscalReadiness = getFiscalConfigurationReadiness(profile);
     const serviceReadiness = getServiceReadiness(service);
+    if (!serviceReadiness.ready) return NextResponse.json({ error: "O serviço selecionado não está pronto para emissão." }, { status: 422 });
     const certificateReadiness = getCertificateReadiness({ certificate: certificateResult.data, organizationTaxId: organization.tax_id });
     const organizationReadiness = getOrganizationReadiness({
       registration: { municipalRegistration: organization.municipal_registration, street: organization.street, addressNumber: organization.address_number, neighborhood: organization.neighborhood, state: organization.state },
@@ -180,18 +182,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ? !signedXml.includes("<indTotTrib>") && signedXml.includes("<pTotTrib>")
       : true;
     const businessRulesPassed = issuerMunicipalRegistrationCompliant && !prestXml.includes("<xNome>") && !prestXml.includes("<end>") && totalTaxesCompliant;
+    // These check that the signed DPS actually reflects the service/operation
+    // requested — not that it matches one specific homologated scenario, so
+    // this validates whichever ready service the office selects.
     if (
-      pAliqEmitted
-      || !businessRulesPassed
-      || prepared.model.service.nationalTaxCode !== "171901"
-      || prepared.model.service.municipalTaxCode !== "001"
-      || prepared.model.service.nbsCode !== "113022100"
-      || prepared.model.service.location.municipalityCode !== "3304557"
-      || prepared.model.fiscal.regime.simpleNational !== "3"
-      || prepared.model.fiscal.regime.simpleAssessment !== "1"
-      || prepared.model.fiscal.regime.special !== "0"
-      || prepared.model.fiscal.iss.taxation !== "1"
-      || prepared.model.fiscal.iss.withholding !== "1"
+      !businessRulesPassed
+      || prepared.model.service.nationalTaxCode !== service.national_tax_code
+      || prepared.model.service.nbsCode !== service.nbs_code
       || prepared.model.amountCents !== operation.data.amountCents
       || prepared.model.competence !== operation.data.competence
     ) {
@@ -205,7 +202,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return NextResponse.json({
       readiness: readinessResponse(organizationReadiness),
-      validation: { dpsBuilt: true, dynamicRules: true, unsignedXsd: true, xmldsig: true, signatureVerification: true, signedXsd: true, gzipBase64: true, payload: true, businessRules: true, pAliqEmitted: false },
+      validation: { dpsBuilt: true, dynamicRules: true, unsignedXsd: true, xmldsig: true, signatureVerification: true, signedXsd: true, gzipBase64: true, payload: true, businessRules: true, pAliqEmitted },
       municipalParameters: {
         lookupCode: service.municipal_service_code,
         conventionAvailable: Boolean(convention),

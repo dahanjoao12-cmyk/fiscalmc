@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { CheckCircle2, ChevronDown, LoaderCircle, ShieldCheck, XCircle } from "lucide-react";
 import { apiUrl } from "@/lib/base-path";
+import type { IssueService } from "@/components/issue-form";
 
 type PreflightResult = {
   readiness: { registration: boolean; fiscal: boolean; service: boolean; certificate: boolean; clientAccess: boolean; organization: boolean };
@@ -33,12 +34,13 @@ const validationLabels: Array<[keyof PreflightResult["validation"], string]> = [
   ["businessRules", "Regras de negócio"],
 ];
 
-export function EmissionPreflight({ organizationId, canRun }: { organizationId: string; canRun: boolean }) {
+export function EmissionPreflight({ organizationId, canRun, services }: { organizationId: string; canRun: boolean; services: IssueService[] }) {
   const [result, setResult] = useState<PreflightResult | null>(null);
   const [error, setError] = useState("");
   const [errorCode, setErrorCode] = useState("");
   const [xsdDiagnostic, setXsdDiagnostic] = useState<XsdDiagnostic | null>(null);
   const [running, setRunning] = useState(false);
+  const [serviceTemplateId, setServiceTemplateId] = useState(services[0]?.id ?? "");
   const [operation, setOperation] = useState({
     taxId: "",
     legalName: "",
@@ -65,6 +67,10 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
       setError("Informe o valor da operação de teste.");
       return;
     }
+    if (!serviceTemplateId) {
+      setError("Selecione o serviço a validar.");
+      return;
+    }
     setRunning(true);
     setError("");
     setErrorCode("");
@@ -75,6 +81,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          serviceTemplateId,
           customer: {
             taxId: operation.taxId,
             legalName: operation.legalName,
@@ -120,6 +127,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
     </summary>
     <form className="emission-preflight-form" onSubmit={run}>
       <p className="form-help full">Os dados são usados somente nesta validação autenticada e não criam uma nota.</p>
+      {services.length ? <label className="full">Serviço a validar<select value={serviceTemplateId} onChange={(event) => setServiceTemplateId(event.target.value)}>{services.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label> : <p className="alert full">Nenhum serviço apto para emissão nesta empresa ainda.</p>}
       <label>CNPJ do tomador<input value={operation.taxId} onChange={(event) => updateField("taxId", event.target.value)} inputMode="numeric" required /></label>
       <label>Razão social do tomador<input value={operation.legalName} onChange={(event) => updateField("legalName", event.target.value)} required /></label>
       <label>Logradouro<input value={operation.street} onChange={(event) => updateField("street", event.target.value)} required /></label>
@@ -132,7 +140,7 @@ export function EmissionPreflight({ organizationId, canRun }: { organizationId: 
       <label>Competência<input value={operation.competence} onChange={(event) => updateField("competence", event.target.value)} type="date" required /></label>
       <label>Ambiente de pré-validação<select value={operation.targetEnvironment} onChange={(event) => updateField("targetEnvironment", event.target.value)}><option value="PRODUCTION_RESTRICTED">Produção Restrita</option><option value="PRODUCTION">Produção (somente leitura)</option></select></label>
       <label className="full">Descrição<textarea value={operation.description} onChange={(event) => updateField("description", event.target.value)} rows={3} required /></label>
-      <div className="full emission-preflight-actions"><button className="button secondary" type="submit" disabled={running}>
+      <div className="full emission-preflight-actions"><button className="button secondary" type="submit" disabled={running || !services.length}>
         {running ? <><LoaderCircle className="spin" size={17} />Pré-validando…</> : "Pré-validar emissão"}
       </button></div>
     </form>
