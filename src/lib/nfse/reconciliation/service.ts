@@ -1,11 +1,11 @@
 import "server-only";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { InvoiceStatus } from "../types";
+import type { InvoiceStatus, NFSeEnvironment } from "../types";
 import { SefinRestrictedReconciliationClient,type OfficialReconciliationResult,type UnknownInvoiceLookup } from "./client";
 
 export interface ReconciliationGateway{
-  getInvoice(input:{invoiceId:string;organizationId:string}):Promise<{status:InvoiceStatus;dpsIdentifier:string}|null>;
+  getInvoice(input:{invoiceId:string;organizationId:string}):Promise<{status:InvoiceStatus;dpsIdentifier:string;environment:NFSeEnvironment}|null>;
   record(input:{invoiceId:string;organizationId:string;result:OfficialReconciliationResult}):Promise<InvoiceStatus>;
 }
 
@@ -14,21 +14,25 @@ export async function reconcileUnknownInvoice(input:{invoiceId:string;organizati
   const invoice=await gateway.getInvoice(input);
   if(!invoice)throw new Error("INVOICE_NOT_FOUND");
   if(invoice.status!=="UNKNOWN")return{status:invoice.status,reconciled:false as const};
-  const result=await (input.lookup??new SefinRestrictedReconciliationClient()).findByDps({organizationId:input.organizationId,dpsIdentifier:invoice.dpsIdentifier});
+  // Must query the SAME environment the DPS was actually transmitted to — a
+  // Production invoice checked against Produção Restrita will always come
+  // back "not found" there, regardless of its real status.
+  const result=await (input.lookup??new SefinRestrictedReconciliationClient(undefined,invoice.environment)).findByDps({organizationId:input.organizationId,dpsIdentifier:invoice.dpsIdentifier});
   const status=await gateway.record({...input,result});
   return{status,reconciled:true as const};
 }
 
 const invoiceStatusSchema=z.enum(["DRAFT","READY","SUBMITTING","ISSUED","REJECTED","UNKNOWN","CANCELLED"]);
+const invoiceEnvironmentSchema=z.enum(["PRODUCTION_RESTRICTED","PRODUCTION"]);
 export function createSupabaseReconciliationGateway():ReconciliationGateway{
   const db=createAdminClient();
   return{
     async getInvoice(input){
-      const{data,error}=await db.from("invoices").select("status,dps_identifier").eq("id",input.invoiceId).eq("organization_id",input.organizationId).maybeSingle();
+      const{data,error}=await db.from("invoices").select("status,dps_identifier,environment").eq("id",input.invoiceId).eq("organization_id",input.organizationId).maybeSingle();
       if(error)throw new Error("INVOICE_LOOKUP_FAILED");
       if(!data)return null;
       if(!data.dps_identifier)throw new Error("DPS_IDENTIFIER_MISSING");
-      return{status:invoiceStatusSchema.parse(data.status),dpsIdentifier:data.dps_identifier};
+      return{status:invoiceStatusSchema.parse(data.status),dpsIdentifier:data.dps_identifier,environment:invoiceEnvironmentSchema.parse(data.environment??"PRODUCTION_RESTRICTED")};
     },
     async record(input){
       const r=input.result;

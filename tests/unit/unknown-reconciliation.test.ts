@@ -33,7 +33,7 @@ describe("UNKNOWN e submissão idempotente",()=>{
 });
 
 function reconciliationGateway(status:InvoiceStatus="UNKNOWN"){
-  let current=status;const gateway:ReconciliationGateway={async getInvoice(){return{status:current,dpsIdentifier:base.dpsIdentifier};},async record(input){current=input.result.status;return current;}};return{gateway,status:()=>current};
+  let current=status;const gateway:ReconciliationGateway={async getInvoice(){return{status:current,dpsIdentifier:base.dpsIdentifier,environment:"PRODUCTION_RESTRICTED"};},async record(input){current=input.result.status;return current;}};return{gateway,status:()=>current};
 }
 
 describe("reconcileUnknownInvoice",()=>{
