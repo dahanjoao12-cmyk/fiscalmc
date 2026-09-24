@@ -1,0 +1,10 @@
+[Unit]
+Description=Sweep NFS-e invoices stuck in UNKNOWN and reconcile them with SEFIN
+After=network.target emissor.service
+
+[Service]
+Type=oneshot
+# INTERNAL_RECONCILE_SECRET must match the value configured in the app's
+# environment (.env.local INTERNAL_RECONCILE_SECRET). Keep this file
+# root-readable only (chmod 600) since it carries that secret in plain text.
+ExecStart=/usr/bin/curl -fsS -X POST -H "x-internal-secret: REPLACE_WITH_REAL_SECRET" http://127.0.0.1:3002/emissor/api/internal/reconcile-pending

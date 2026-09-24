@@ -1,0 +1,10 @@
+[Unit]
+Description=Run reconcile-pending.service every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=reconcile-pending.service
+
+[Install]
+WantedBy=timers.target
